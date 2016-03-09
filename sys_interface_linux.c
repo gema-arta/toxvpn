@@ -70,14 +70,14 @@ int sysnet_interface_set_mtu(VPNInterface *i, unsigned int mtu)
 
     if (!link)
     {
-        tox_trace(i->tox, "can't find link \"%s\"", i->name);
+        tox_trace(i->context->tox, "can't find link \"%s\"", i->name);
         return -1;
     }
 
     rtnl_link_set_mtu(new_link, mtu);
 
     if ((err = rtnl_link_change(sock, link, new_link, 0)) < 0) {
-        tox_trace(i->tox, "unable to change link \"%s\" flags: %s", rtnl_link_get_name(link), nl_geterror(err));
+        tox_trace(i->context->tox, "unable to change link \"%s\" flags: %s", rtnl_link_get_name(link), nl_geterror(err));
     }
 
     rtnl_link_put(link);
@@ -106,7 +106,7 @@ int sysnet_interface_set(VPNInterface *i, int up)
 
     if (!link)
     {
-        tox_trace(i->tox, "Can't find link \"%s\"", i->name);
+        tox_trace(i->context->tox, "Can't find link \"%s\"", i->name);
         return -1;
     }
 
@@ -114,7 +114,7 @@ int sysnet_interface_set(VPNInterface *i, int up)
     rtnl_link_set_flags(new_link, new_flags);
 
     if ((err = rtnl_link_change(sock, link, new_link, 0)) < 0) {
-        tox_trace(i->tox, "Unable to change link \"%s\" flags: %s", rtnl_link_get_name(link), nl_geterror(err));
+        tox_trace(i->context->tox, "Unable to change link \"%s\" flags: %s", rtnl_link_get_name(link), nl_geterror(err));
     }
 
     rtnl_link_put(link);
@@ -160,10 +160,10 @@ int sysnet_interface_set_addr(VPNInterface *i)
     rtnl_addr_set_link(addr, link);
 
     if ((err = rtnl_addr_add(sock, addr, 0)) < 0) {
-        tox_trace(i->tox, "Unable to add address %s on %s: %s", ip_ntoa(&i->address.ip), rtnl_link_get_name(link), nl_geterror(err));
+        tox_trace(i->context->tox, "Unable to add address %s on %s: %s", ip_ntoa(&i->address.ip), rtnl_link_get_name(link), nl_geterror(err));
     }
     else {
-        tox_trace(i->tox, "Added address %s on \"%s\"", ip_ntoa(&i->address.ip), i->name);
+        tox_trace(i->context->tox, "Added address %s on \"%s\"", ip_ntoa(&i->address.ip), i->name);
     }
 
     rtnl_link_put(link);

@@ -113,7 +113,7 @@ static int interface_init_low_level(VPNInterface *i)
     if (sysnet_interface_create(i) != 0 || sysnet_interface_up(i) != 0 ||
             sysnet_interface_set_addr(i) != 0 || sysnet_interface_set_mtu(i, TOXVPN_MTU) != 0) {
 #if DEBUG
-        tox_trace(i->tox, "interface_init_low_level() can't setup devtun");
+        tox_trace(i->context->tox, "interface_init_low_level() can't setup devtun");
 #endif
         return -1;
     }
@@ -122,12 +122,12 @@ static int interface_init_low_level(VPNInterface *i)
     }
 }
 
-static VPNInterface *interface_create(Tox *tox, const char *subnet_str, uint8_t mask_prefix,
+static VPNInterface *interface_create(ToxVPNContext *context, const char *subnet_str, uint8_t mask_prefix,
                                       const uint8_t *toxvpn_shareid, int init_system_interface)
 {
     VPNInterface *i = calloc(sizeof(struct VPNInterface), 1);
     i->fd = INVALID_FD;
-    i->tox = tox;
+    i->context = context;
 
     addr_parse_ip(subnet_str, &i->address.subnet);
     i->address.prefix = mask_prefix;
@@ -143,7 +143,7 @@ static VPNInterface *interface_create(Tox *tox, const char *subnet_str, uint8_t 
 
     //Compute toxvpn IP
     uint8_t pk[TOX_PUBLIC_KEY_SIZE];
-    tox_self_get_public_key(tox, pk);
+    tox_self_get_public_key(context->tox, pk);
     compute_ip(pk, &i->address.subnet, i->address.prefix, &i->address.ip);
 
     vpn_members_table_init(&i->members_table);
@@ -157,7 +157,7 @@ static VPNInterface *interface_create(Tox *tox, const char *subnet_str, uint8_t 
         vpn_members_table_add_self(i, &i->members_table);
     }
 
-    tox_trace(tox, "created interface \"%s\" %s/%u",
+    tox_trace(context->tox, "created interface \"%s\" %s/%u",
                  i->name, ip_ntoa(&i->address.ip), (uint32_t) i->address.prefix);
 
     //TODO: add configuration
@@ -187,7 +187,7 @@ static int send_lossless_packet(VPNInterface *i, int friendnumber, const uint8_t
 {
     struct VPNPacketHeader *header = (struct VPNPacketHeader*) data;
     header->tox_packet_type = PACKET_ID_TOXVPN_LOSSLESS_PACKET;
-    return !tox_friend_send_lossless_packet(i->tox, friendnumber, data, size, 0);
+    return !tox_friend_send_lossless_packet(i->context->tox, friendnumber, data, size, 0);
 }
 
 static int send_lossy_packet(VPNInterface *i, uint32_t friendnumber, const uint8_t *data, size_t size)
@@ -201,7 +201,7 @@ static int send_lossy_packet(VPNInterface *i, uint32_t friendnumber, const uint8
     }
 
     member->last_packet_sent_timestamp = time(NULL);
-    return !tox_friend_send_lossy_packet(i->tox, friendnumber, (const void *) data, size, 0);
+    return !tox_friend_send_lossy_packet(i->context->tox, friendnumber, (const void *) data, size, 0);
 }
 
 static int broadcast_lossy_packet(VPNInterface *i, const void *data, size_t size)
@@ -234,7 +234,7 @@ static bool send_members_table(VPNInterface *i, uint32_t friendnumber)
     assert(i);
 
     size_t payload_size;
-    uint8_t *serialialized_table = vpn_members_table_serialize(i->tox, &i->members_table,
+    uint8_t *serialialized_table = vpn_members_table_serialize(i->context->tox, &i->members_table,
                                                                &payload_size);
 
     const size_t raw_packet_size = sizeof(struct VPNMembersTablePacketHeader) + payload_size;
@@ -298,7 +298,7 @@ static bool process_incoming_members_table(VPNInterface* interface, uint32_t fri
 
     assert(payload_size == data_length - sizeof(struct VPNMembersTablePacketHeader));
     struct VPNMembersTable received_table;
-    vpn_members_table_deserialize(interface->tox, serialized_table_ptr, payload_size, &received_table);
+    vpn_members_table_deserialize(interface->context->tox, serialized_table_ptr, payload_size, &received_table);
 
     bool members_table_changed = vpn_members_table_merge(&interface->members_table, &received_table);
     vpn_members_table_free(&received_table);
@@ -313,20 +313,20 @@ static bool process_incoming_members_table(VPNInterface* interface, uint32_t fri
 
         if (member_ptr->friendnumber == TOXVPN_FRIENDID_SELF &&
             !ip_equal(&member_ptr->ip, &interface->address.ip)) {
-            tox_trace(interface->tox, "updating local vpn ip address to %s", ip_ntoa(&member_ptr->ip));
+            tox_trace(interface->context->tox, "updating local vpn ip address to %s", ip_ntoa(&member_ptr->ip));
             ip_copy(&interface->address.ip, &member_ptr->ip);
         }
         else if (member_ptr->friendnumber == TOXVPN_FRIENDID_INVALID && interface->autoadd_friends) {
 
-            member_ptr->friendnumber = tox_friend_add_norequest(interface->tox, member_ptr->member_pk, NULL);
+            member_ptr->friendnumber = tox_friend_add_norequest(interface->context->tox, member_ptr->member_pk, NULL);
             char *pk_hex_str = bin_to_hex_str(member_ptr->member_pk, TOX_PUBLIC_KEY_SIZE);
 
             if (member_ptr->friendnumber == TOXVPN_FRIENDID_INVALID) {
-                tox_trace(interface->tox, "added friend %lu with pk \"%s\". IP: %s. Reason: new members table was received.",
+                tox_trace(interface->context->tox, "added friend %lu with pk \"%s\". IP: %s. Reason: new members table was received.",
                           member_ptr->friendnumber, pk_hex_str, ip_ntoa(&member_ptr->ip));
             }
             else {
-                tox_trace(interface->tox, "error autoadding new friend with pk: %s", pk_hex_str);
+                tox_trace(interface->context->tox, "error autoadding new friend with pk: %s", pk_hex_str);
             }
 
             free(pk_hex_str);
@@ -335,7 +335,7 @@ static bool process_incoming_members_table(VPNInterface* interface, uint32_t fri
 
     /* If members table was changed - broadcast it to all friends */
     if (members_table_changed) {
-        tox_trace(interface->tox, "broadcast new members table. Reason: new members table was received");
+        tox_trace(interface->context->tox, "broadcast new members table. Reason: new members table was received");
         send_members_table(interface, TOXVPN_FRIENDID_BROADCAST);
     }
 
@@ -353,12 +353,12 @@ static bool process_membership_response(VPNInterface *interface, uint32_t friend
     }
 
     if (response_packet->flags == TOXVPN_MEMBERSHIP_ACCEPT) {
-        toxvpn_friend_add(interface->tox, interface->id, friendnumber);
+        toxvpn_friend_add(interface->context->tox, interface->id, friendnumber);
         /* If members table was changed - broadcast it to all friends */
-        tox_trace(interface->tox, "broadcast new members table. Reason: new member was added");
+        tox_trace(interface->context->tox, "broadcast new members table. Reason: new member was added");
         send_members_table(interface, TOXVPN_FRIENDID_BROADCAST); //broadcast members table
     } else {
-        tox_trace((Tox *) m, "invite to toxvpn was discarded");
+        tox_trace(context->tox, "invite to toxvpn was discarded");
     }
 
     return true;
@@ -370,7 +370,7 @@ static int process_incoming_ip_packet(VPNInterface *i, uint32_t friendnumber, co
     if (member == NULL)
     {
 #if DEBUG
-        tox_trace(i->tox, "received ip packet but member was not invited");
+        tox_trace(i->context->tox, "received ip packet but member was not invited");
         return -1;
 #endif
     }
@@ -381,7 +381,7 @@ static int process_incoming_ip_packet(VPNInterface *i, uint32_t friendnumber, co
 #if DEBUG
         char self_addr_str[96];
         sprintf(self_addr_str, "%s", ip_ntoa(&i->address.ip));
-        tox_trace(i->tox, "received packet with incorrect destination address %s. Our address is %s. Packet will be ignored",
+        tox_trace(i->context->tox, "received packet with incorrect destination address %s. Our address is %s. Packet will be ignored",
                      ip_ntoa(&dst_ip), self_addr_str);
 #endif
         return -1;
@@ -418,7 +418,7 @@ static int process_outgoing_ip_packet(VPNInterface *i, void *data, size_t size)
 
     if (member) {
 #if DEBUG
-        tox_trace(i->tox, "sending IP packet - size: %lu, friendnumber: %u", size, member->friendnumber);
+        tox_trace(i->context->tox, "sending IP packet - size: %lu, friendnumber: %u", size, member->friendnumber);
 #endif
         status = send_lossy_packet(i, member->friendnumber, (const void *) &outcoming_packet, sizeof(outcoming_packet));
     }
@@ -427,7 +427,7 @@ static int process_outgoing_ip_packet(VPNInterface *i, void *data, size_t size)
     }
     else {
 #if DEBUG
-        tox_trace(i->tox, "can't send packet to non-member %s", ip_ntoa(&dst_ip));
+        tox_trace(i->context->tox, "can't send packet to non-member %s", ip_ntoa(&dst_ip));
 #endif
         size_t icmp_message_size;
         uint8_t *icmp_message_ptr = ip_compose_icmp_unreacheable_message(&i->address.subnet, &src_ip, &icmp_message_size);
@@ -491,8 +491,8 @@ uint32_t toxvpn_friend_add(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t 
     member.friendnumber = friendnumber;
     member.update_timestamp = time(NULL);
 
-    tox_self_get_public_key(i->tox, member.issuer_pk);
-    tox_friend_get_public_key(i->tox, friendnumber, member.member_pk, 0);
+    tox_self_get_public_key(i->context->tox, member.issuer_pk);
+    tox_friend_get_public_key(i->context->tox, friendnumber, member.member_pk, 0);
 
     struct VPNAddress member_address;
     member_address.prefix = i->address.prefix;
@@ -682,7 +682,7 @@ bool toxvpn_request_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint3
     request_packet.prefix = i->address.prefix;
 
     TOX_ERR_FRIEND_CUSTOM_PACKET error;
-    tox_friend_send_lossless_packet(i->tox, friendnumber, (uint8_t*) &request_packet, sizeof(request_packet), &error);
+    tox_friend_send_lossless_packet(i->context->tox, friendnumber, (uint8_t*) &request_packet, sizeof(request_packet), &error);
     return error == 0;
 }
 
@@ -840,12 +840,12 @@ bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t si
 
         uint8_t *shareid_str = hex_string_to_bin(json_string_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SHAREID)));
 
-        VPNInterface *interface = interface_create(tox, json_string_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SUBNET)),
+        VPNInterface *interface = interface_create(context, json_string_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SUBNET)),
                          json_integer_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SUBNETPREFIX)), shareid_str, true);
 
         if (!interface)
         {
-            tox_trace(tox, "can't create network with shareid %s", shareid_str);
+            tox_trace(context->tox, "can't create network with shareid %s", shareid_str);
             goto error;
         }
 
@@ -875,7 +875,7 @@ bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t si
             vpn_members_table_add(&interface->members_table, &member);
         }
 
-        interface_add(tox, interface);
+        interface_add(context, interface);
     }
     return true;
 

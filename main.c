@@ -3,7 +3,6 @@
 #endif
 #define _POSIX_C_SOURCE 200900
 
-#include "toxvpn.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,6 +14,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <limits.h>
+#include "toxvpn.h"
 
 #define min(x, y) (x < y ? x : y)
 

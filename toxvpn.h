@@ -37,7 +37,7 @@ bool toxvpn_attach(Tox *tox);
 
 /**
  * @brief toxvpn_new
- * @param tox
+ * @param context
  * @param subnet
  * @param mask
  * @return on error value that less than 0, elsewise new toxvpn_id
@@ -46,7 +46,7 @@ uint32_t toxvpn_new(ToxVPNContext *context, const char *subnet, uint8_t mask_cid
 
 /**
  * @brief toxvpn_callback_membership_request
- * @param tox
+ * @param context
  * @param callback
  *  @param pointer to Tox instance
  *  @param friendnumber friend number
@@ -59,7 +59,7 @@ void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)
 
 /**
  * @brief toxvpn_callback_membership_response
- * @param tox
+ * @param context
  * @param callback
  *  @param pointer to Tox instance
  *  @param friendnumber friend number
@@ -74,7 +74,7 @@ bool toxvpn_response_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint
 
 /**
  * @brief toxvpn_kill release vpn, free resources and shutdown link
- * @param tox
+ * @param context
  * @param toxvpn_id
  * @return 0 on success, elsewise -1
  */
