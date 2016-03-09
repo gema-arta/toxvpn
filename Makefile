@@ -7,6 +7,8 @@ LDFLAGS += -Bstatic
 
 OUTFILE := toxvpn
 
+all: $(OUTFILE)
+
 $(OUTFILE): $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
 

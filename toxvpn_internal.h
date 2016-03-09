@@ -12,11 +12,9 @@
 #define TOXVPN_PACKET_TYPE_MEMBERS_TABLE 20
 #define TOXVPN_PACKET_TYPE_GET_MEMBERS_TABLE 21
 
-#include "tox.h"
+#include <tox/tox.h>
 #include "toxvpn.h"
 #include "network.h"
-#include "list.h"
-
 #include <stdlib.h>
 #include <stdint.h>
 #include <netinet/ip.h>
@@ -56,7 +54,7 @@ typedef struct VPNInterface {
 #if defined(TOXVPN_DEVTUN)
     int fd;
 #endif
-    Tox *tox;
+    ToxVPNContext *context;
     uint32_t id;
     struct VPNMembersTable members_table;
     struct VPNAddress address;

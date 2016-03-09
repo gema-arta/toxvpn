@@ -1,7 +1,6 @@
 #ifndef IP_PACKET_H
 #define IP_PACKET_H
 
-#include "network.h"
 #include "toxvpn_internal.h"
 
 size_t ip_extract_size(const uint8_t *data, size_t size);

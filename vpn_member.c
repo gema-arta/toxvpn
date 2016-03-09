@@ -1,4 +1,4 @@
-#include <tox.h>
+#include <tox/tox.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <assert.h>

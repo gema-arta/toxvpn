@@ -4,8 +4,6 @@
 #define _POSIX_C_SOURCE 200900
 
 #include "toxvpn.h"
-#include "util.h"
-#include "misc_tools.c"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -515,7 +513,6 @@ int main(int argc, char *argv[])
         usleep(300);
     }
 
-
     if (options.options_mask & SETTINGS_FILE_SET) {
         if (settings_save(tox, options.settings_path_pattern)) {
             tox_trace(tox, "Settings has been saved to \"%s\"", options.settings_path_pattern);
@@ -523,8 +520,6 @@ int main(int argc, char *argv[])
         else {
             tox_trace(tox, "Can't save settings to \"%s\": %s", options.settings_path_pattern, strerror(errno));
         }
-
-
     }
 
     tox_kill(tox);
