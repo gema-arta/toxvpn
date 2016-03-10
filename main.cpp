@@ -15,7 +15,7 @@
 #include <arpa/inet.h>
 #include <limits.h>
 
-#include <iostream>
+#include <string>
 #include <cstdarg>
 
 #include "toxvpn.h"
@@ -24,6 +24,8 @@
 
 #define DEFAULT_BOOTSTRAP_NODE 	"144.76.60.215:33445:04119E835DF3E78BACF0F84235B300546AF8B936F035185E2A8E9E0A67C8924F"
 #define DEFAULT_SUBNET "10.0.100.0/24"
+
+using std::string;
 
 
 inline void trace(const char* formator, ...) {
@@ -63,7 +65,6 @@ struct ApplicationContext{
 
     ApplicationContext()
     {
-        bzero(this, sizeof(*this));
         parse_bootstrap_node(DEFAULT_BOOTSTRAP_NODE);
         parse_subnet(DEFAULT_SUBNET);
     }
@@ -99,6 +100,30 @@ struct ApplicationContext{
     ToxVPNContext *vpn_context = nullptr;
 
     bool running = true;
+
+    string get_secret_representation() const
+    {
+        size_t first_zero_byte_pos = (size_t) -1;
+        for (size_t i = 0; i < sizeof(secret); i++) {
+            if (secret[i] == 0) {
+                if (first_zero_byte_pos == (size_t) -1) {
+                    first_zero_byte_pos = i;
+                }
+            }
+            else {
+                first_zero_byte_pos = (size_t) -1;
+            }
+        }
+
+        if (first_zero_byte_pos != (size_t) -1) {
+          char* secret_str = bin_to_hex_str(secret, first_zero_byte_pos);
+          string result(secret_str);
+          free(secret_str);
+          return result;
+        }
+
+        return string();
+    }
 
     void print_usage(int argc, char **argv) const
     {
@@ -253,17 +278,35 @@ struct ApplicationContext{
                 app_context->options_mask |= SETTINGS_FILE_SET;
                 break;
             case 'c':
-                if (strlen(optarg)/2 != TOX_ADDRESS_SIZE)
+            {
+                if (strlen(optarg)/2 < TOX_ADDRESS_SIZE)
                 {
                     fprintf(stderr, "Invalid server node address size: %lu\n", strlen(optarg)/2);
                     return -2;
                 }
 
-                converted = hex_string_to_bin(optarg);
+                static const char* delim = ":";
+                char* arg_dup = strdup(optarg);
+                char* token = strtok(arg_dup, delim);
+
+                assert(token);
+                converted = hex_string_to_bin(token);
                 memcpy(app_context->server_address, converted, sizeof(app_context->server_address));
-                free(converted);
                 app_context->options_mask |= (SERVER_ADDRESS_SET | CLIENT_MODE_SET);
+
+                token = strtok(NULL, delim);
+                if (token) {
+                    options_mask |= SECRET_SET;
+                    uint8_t *secret_data = hex_string_to_bin(token);
+                    memcpy(secret, secret_data, strlen(token) / 2);
+                    free(secret_data);
+                }
+
+                free(arg_dup);
+                free(converted);
+
                 break;
+            }
             case 'h':
                 return 1;
             case '?':
@@ -283,8 +326,6 @@ struct ApplicationContext{
             return 0;
         }
     }
-
-
 } app_context;
 
 
@@ -505,13 +546,11 @@ int main(int argc, char *argv[])
 
     ToxVPNContext *vpn_context = create_vpn_context(tox, &app_context);
 
-
-    char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
-    char *secret_str = bin_to_hex_str(app_context.secret, sizeof(app_context.secret));
-    trace("connect address %s:%s", address_str, secret_str);
-
-    free(address_str);
-    free(secret_str);
+    {
+        char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
+        trace("connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
+        free(address_str);
+    }
 
     app_context.options_mask |= ADDRESS_SET;
 
