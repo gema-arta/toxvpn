@@ -31,7 +31,7 @@ typedef struct ToxVPNContext {
     BS_LIST toxvpn_interfaces;
 } ToxVPNContext;
 
-bool toxvpn_attach(Tox *tox);
+ToxVPNContext* toxvpn_create_context(Tox *tox);
 
 
 
@@ -55,7 +55,7 @@ uint32_t toxvpn_new(ToxVPNContext *context, const char *subnet, uint8_t mask_cid
  *  @param userdata userdata that should be passed
  * @param userdata userdata to pass in callback
  */
-void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)(Tox *tox, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata), void *userdata);
+void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)(ToxVPNContext *tox, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata), void *userdata);
 
 /**
  * @brief toxvpn_callback_membership_response
@@ -68,7 +68,8 @@ void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)
  *  @param userdata userdata that should be passed
  * @param userdata userdata to pass in callback
  */
-void toxvpn_callback_membership_response(ToxVPNContext *context, void (*callback)(Tox *tox, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata), void *userdata);
+void toxvpn_callback_membership_response(ToxVPNContext *context, void (*callback)(ToxVPNContext *tox, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata), void *userdata);
+
 bool toxvpn_request_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber, uint8_t flags);
 bool toxvpn_response_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber, uint8_t flags);
 
@@ -78,8 +79,8 @@ bool toxvpn_response_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint
  * @param toxvpn_id
  * @return 0 on success, elsewise -1
  */
-int toxvpn_kill(Tox *tox, uint32_t toxvpn_id);
-int toxvpn_iterate(Tox *tox);
+int toxvpn_kill(ToxVPNContext *context, uint32_t toxvpn_id);
+int toxvpn_events_loop(ToxVPNContext *context);
 
 const char* toxvpn_self_get_ip(ToxVPNContext *context, uint32_t toxvpn_id);
 const char* toxvpn_self_get_name(ToxVPNContext *context, uint32_t toxvpn_id);
@@ -90,8 +91,8 @@ bool toxvpn_friend_get_list(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t
 size_t toxvpn_friend_get_list_size(ToxVPNContext *context, uint32_t toxvpn_id);
 const char* toxvpn_friend_get_ip(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber);
 
-size_t toxvpn_get_list_size(ToxVPNContext *context);
-bool toxvpn_get_list(ToxVPNContext *context, uint32_t *list);
+size_t toxvpn_get_list_size(const ToxVPNContext *context);
+bool toxvpn_get_list(const ToxVPNContext *context, uint32_t *list);
 
 char* toxvpn_settings_dump(const ToxVPNContext *context);
 bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t size);

@@ -4,12 +4,15 @@
 #include "sys_interface.h"
 #include "network.h"
 #include "ip_packet.h"
+#include "util.h"
+
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <strings.h>
 #include <assert.h>
 #include <jansson.h>
+#include <sodium/randombytes.h>
 
 static void packet_init(const VPNInterface * const i, struct VPNPacketHeader *header)
 {
@@ -44,7 +47,7 @@ static bool compute_ip(const uint8_t *nonce, const IP* subnet_addr, uint8_t pref
     return true;
 }
 
-static inline size_t interface_get_count(ToxVPNContext *context)
+static inline size_t interface_get_count(const ToxVPNContext *context)
 {
     return context->toxvpn_interfaces.n;
 }
@@ -60,9 +63,9 @@ static VPNInterface *interface_find_by_shareid(const ToxVPNContext *context, con
     assert(context->tox);
     assert(shareid);
 
-    for (int j = 0; j < interface_get_count(context->tox); j++) {
-        if (memcmp(shareid, interface_get(context->tox, j)->shareid, TOXVPN_SHAREID_SIZE) == 0) {
-            return interface_get(context->tox, j);
+    for (int j = 0; j < interface_get_count(context); j++) {
+        if (memcmp(shareid, interface_get(context, j)->shareid, TOXVPN_SHAREID_SIZE) == 0) {
+            return interface_get(context, j);
         }
     }
 
@@ -72,11 +75,11 @@ static VPNInterface *interface_find_by_shareid(const ToxVPNContext *context, con
 static VPNInterface *interface_find_by_id(const ToxVPNContext *context, uint32_t id)
 {
     assert(id != UINT32_MAX);
-    BS_LIST *interfaces = &context->toxvpn_interfaces;
+    const BS_LIST *interfaces = &context->toxvpn_interfaces;
 
-    for (int j = 0; j < interface_get_count(context->tox); j++) {
+    for (int j = 0; j < interface_get_count(context); j++) {
         if (interfaces->ids[j] == id) {
-            return interface_get(context->tox, j);
+            return interface_get(context, j);
         }
     }
 
@@ -87,11 +90,11 @@ static bool interface_add(ToxVPNContext *context, const VPNInterface *i)
 {
     BS_LIST *interfaces = &context->toxvpn_interfaces;
 
-    if (interface_get_count(context->tox) == 0) {
+    if (interface_get_count(context) == 0) {
         bs_list_init(interfaces, sizeof(i), 2);
     }
 
-    return bs_list_add(interfaces, &i, (int) i->id);
+    return bs_list_add(interfaces, (const uint8_t*) &i, (int) i->id);
 }
 
 static int interface_free(VPNInterface* i)
@@ -157,8 +160,7 @@ static VPNInterface *interface_create(ToxVPNContext *context, const char *subnet
         vpn_members_table_add_self(i, &i->members_table);
     }
 
-    tox_trace(context->tox, "created interface \"%s\" %s/%u",
-                 i->name, ip_ntoa(&i->address.ip), (uint32_t) i->address.prefix);
+    tox_trace(context->tox, "created interface \"%s\" %s/%u", i->name, ip_ntoa(&i->address.ip), (uint32_t) i->address.prefix);
 
     //TODO: add configuration
     i->autoadd_friends = true;
@@ -175,8 +177,8 @@ error:
 static int interface_remove_and_release(ToxVPNContext *context, uint32_t id)
 {
     BS_LIST *interfaces = &context->toxvpn_interfaces;
-    VPNInterface *i = interface_find_by_id(context->tox, id);
-    bs_list_remove(interfaces, i, id);
+    VPNInterface *i = interface_find_by_id(context, id);
+    bs_list_remove(interfaces, (const uint8_t *) i, id);
     return interface_free(i);
 }
 
@@ -353,7 +355,7 @@ static bool process_membership_response(VPNInterface *interface, uint32_t friend
     }
 
     if (response_packet->flags == TOXVPN_MEMBERSHIP_ACCEPT) {
-        toxvpn_friend_add(interface->context->tox, interface->id, friendnumber);
+        toxvpn_friend_add(interface->context, interface->id, friendnumber);
         /* If members table was changed - broadcast it to all friends */
         tox_trace(interface->context->tox, "broadcast new members table. Reason: new member was added");
         send_members_table(interface, TOXVPN_FRIENDID_BROADCAST); //broadcast members table
@@ -445,14 +447,17 @@ static int process_outgoing_ip_packet(VPNInterface *i, void *data, size_t size)
  */
 static void process_packet(Tox *tox, uint32_t friendnumber, const uint8_t *packet, size_t length, void *userdata)
 {
+    ToxVPNContext *context = (ToxVPNContext*) userdata;
     assert(tox);
+    assert(context->tox == tox);
+
     if (sizeof(struct VPNPacketHeader) > length) {
         tox_trace(tox, "received invalid size package: %lu", length);
         return;
     }
 
     struct VPNPacketHeader *packet_header = (struct VPNPacketHeader*) packet;
-    VPNInterface *i = (VPNInterface*) interface_find_by_shareid(tox, packet_header->shareid);
+    VPNInterface *i = (VPNInterface*) interface_find_by_shareid(context, packet_header->shareid);
 
 #if DEBUG
     char *shareid_str = bin_to_hex_str(packet_header->shareid, TOXVPN_SHAREID_SIZE);
@@ -461,7 +466,7 @@ static void process_packet(Tox *tox, uint32_t friendnumber, const uint8_t *packe
     free(shareid_str);
 #endif
     if (packet_header->type == TOXVPN_PACKET_TYPE_MEMBERSHIP_REQUEST) {
-       process_membership_request(tox, friendnumber, packet, length);
+       process_membership_request(context, friendnumber, packet, length);
     } else if (packet_header->type == TOXVPN_PACKET_TYPE_MEMBERSHIP_RESPONSE) {
         assert(i);
         process_membership_response(i, friendnumber, packet, length);
@@ -520,12 +525,15 @@ static int toxvpn_friend_rem(Tox *tox, uint32_t toxvpn_id, uint32_t friendnumber
 #endif
 
 /* ToxVPN Public API */
-bool toxvpn_attach(Tox *tox)
+ToxVPNContext *toxvpn_create_context(Tox *tox)
 {
     assert(tox);
-    tox_callback_friend_lossy_packet(tox, process_packet, NULL);
-    tox_callback_friend_lossless_packet(tox, process_packet, NULL);
-    return true;
+    ToxVPNContext *context = (ToxVPNContext*) malloc(sizeof(struct ToxVPNContext));
+    memset(context, 0x0, sizeof(*context));
+
+    tox_callback_friend_lossy_packet(tox, process_packet, context);
+    tox_callback_friend_lossless_packet(tox, process_packet, context);
+    return context;
 }
 
 uint32_t toxvpn_new(ToxVPNContext *context, const char *subnet_str, uint8_t mask_cidr)
@@ -570,7 +578,7 @@ const char* toxvpn_self_get_name(ToxVPNContext *context, uint32_t toxvpn_id)
 //TODO: rename to toxvpn_net_get_shareid()
 bool toxvpn_self_get_shareid(ToxVPNContext *context, uint32_t toxvpn_id, uint8_t *share_id)
 {
-    VPNInterface *i = interface_find_by_id(context->tox, toxvpn_id);
+    VPNInterface *i = interface_find_by_id(context, toxvpn_id);
 
     if (i == NULL) {
         return false;
@@ -600,7 +608,7 @@ size_t toxvpn_friend_get_list_size(ToxVPNContext *context, uint32_t toxvpn_id)
 
 bool toxvpn_friend_get_list(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t *list)
 {
-    VPNInterface *vi = interface_find_by_id(context->tox, toxvpn_id);
+    VPNInterface *vi = interface_find_by_id(context, toxvpn_id);
     if (vi == NULL)
         return false;
 
@@ -610,16 +618,16 @@ bool toxvpn_friend_get_list(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t
     return true;
 }
 
-bool toxvpn_get_list(ToxVPNContext *context, uint32_t *list)
+bool toxvpn_get_list(const ToxVPNContext *context, uint32_t *list)
 {
-    for (int i =0; i < interface_get_count(context->tox); i++) {
-        list[i] = interface_get(context->tox, i)->id;
+    for (int i =0; i < interface_get_count(context); i++) {
+        list[i] = interface_get(context, i)->id;
     }
 
     return true;
 }
 
-size_t toxvpn_get_list_size(ToxVPNContext *context)
+size_t toxvpn_get_list_size(const ToxVPNContext *context)
 {
     return interface_get_count(context);
 }
@@ -654,7 +662,7 @@ bool toxvpn_response_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint
     response_packet.flags = flags;
 
     int status = send_lossless_packet(i, friendnumber, (uint8_t*) &response_packet, sizeof(response_packet));
-    tox_trace(context, "sending a toxvpn invitation response to %u", friendnumber);
+    tox_trace(context->tox, "sending a toxvpn invitation response to %u", friendnumber);
 
     if (flags & TOXVPN_MEMBERSHIP_DISCARD)
     {
@@ -686,10 +694,10 @@ bool toxvpn_request_membership(ToxVPNContext *context, uint32_t toxvpn_id, uint3
     return error == 0;
 }
 
-int toxvpn_iterate(Tox *tox)
+int toxvpn_events_loop(ToxVPNContext *context)
 {
-    for (int j = 0; j < interface_get_count(tox); j++) {
-        VPNInterface *interface = interface_get(tox, j);
+    for (int j = 0; j < interface_get_count(context); j++) {
+        VPNInterface *interface = interface_get(context, j);
 
         if (!interface->error.no && sysnet_interface_is_initialized(interface)) {
 
@@ -702,7 +710,7 @@ int toxvpn_iterate(Tox *tox)
                 if (errno != EAGAIN) { //devtun interface was opened in nonblocking mode
                     interface->error.no = errno;
                     interface->error.description = strerror(errno);
-                    tox_trace(tox, "an error has occured during reading from devtun %s: %s",
+                    tox_trace(context->tox, "an error has occured during reading from devtun %s: %s",
                                  interface->name, interface->error.description);
                 }
 
@@ -738,9 +746,9 @@ int toxvpn_iterate(Tox *tox)
     return 0;
 }
 
-int toxvpn_kill(Tox *tox, uint32_t toxvpn_id)
+int toxvpn_kill(ToxVPNContext *context, uint32_t toxvpn_id)
 {
-    return interface_remove_and_release(tox, toxvpn_id);
+    return interface_remove_and_release(context, toxvpn_id);
 }
 
 
@@ -826,7 +834,7 @@ bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t si
 {
     json_error_t error;
 
-    json_t *root = json_loadb(data, size, 0, &error);
+    json_t *root = json_loadb((const char*) (data), size, 0, &error);
 
     if (!root || !json_is_object(root)) {
         tox_trace(context->tox, "toxvpn_settings_load failed at %d:%d- %s", error.line, error.column, error.text);
@@ -881,4 +889,18 @@ bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t si
 
 error:
     return false;
+}
+
+
+void toxvpn_callback_membership_response(ToxVPNContext *context, void (*callback)(ToxVPNContext *, int32_t, int32_t, uint8_t, void *), void *userdata)
+{
+    context->toxvpn_membership_response = callback;
+    context->toxvpn_membership_response_data = userdata;
+}
+
+
+void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)(ToxVPNContext *, int32_t, int32_t, uint8_t, void *), void *userdata)
+{
+    context->toxvpn_membership_request = callback;
+    context->toxvpn_membership_request_data = userdata;
 }

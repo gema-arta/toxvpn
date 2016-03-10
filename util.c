@@ -1,6 +1,8 @@
 #include <tox/tox.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
+#include <stdlib.h>
 
 void tox_trace(const Tox *tox, const char* formator, ...)
 {
@@ -18,6 +20,7 @@ void tox_trace(const Tox *tox, const char* formator, ...)
     fprintf(file, "\n");
 }
 
+
 uint8_t *hex_string_to_bin(const char *hex_string)
 {
     // byte is represented by exactly 2 hex digits, so lenth of binary string
@@ -26,7 +29,7 @@ uint8_t *hex_string_to_bin(const char *hex_string)
     // is odd and return error code if it is. we assume strlen is even. if it's not
     // then the last byte just won't be written in 'ret'.
     size_t i, len = strlen(hex_string) / 2;
-    uint8_t *ret = malloc(len);
+    uint8_t *ret = (uint8_t*) malloc(len);
     const char *pos = hex_string;
 
     for (i = 0; i < len; ++i, pos += 2)

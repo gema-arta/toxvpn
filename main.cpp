@@ -14,7 +14,21 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <limits.h>
+
+#include <iostream>
+#include <cstdarg>
+
 #include "toxvpn.h"
+#include "util.h"
+
+
+inline void trace(const char* formator, ...) {
+    FILE *file = stderr;
+    va_list al;
+    va_start(al, formator);
+    vfprintf(file, formator, al);
+    fprintf(file, "\n");
+}
 
 #define min(x, y) (x < y ? x : y)
 
@@ -41,7 +55,7 @@ enum OptionFlags {
     SETTINGS_FILE_SET   =   256,
 };
 
-struct Context{
+struct ApplicationContext{
     char *subnet;
     uint16_t prefixlen;
 
@@ -69,7 +83,10 @@ struct Context{
     } dht_bootstrap_node;
 
     int options_mask;
-} options;
+
+    ToxVPNContext *vpn_context = nullptr;
+
+} app_context;
 
 bool app_running = true;
 
@@ -81,7 +98,7 @@ void singnal_handler(int signal_code)
         app_running = false;
         break;
     default:
-        tox_trace(NULL, "received unexpected signal %d", signal_code);
+        trace("received unexpected signal %d", signal_code);
         break;
     }
 }
@@ -89,11 +106,11 @@ void singnal_handler(int signal_code)
 static void on_fiend_connection_status_cnaged(Tox *tox, uint32_t friend_id, TOX_CONNECTION connection_status, void *user_data)
 {
     assert(user_data);
-    struct Context *options = (struct Context *) user_data;
+    struct ApplicationContext *options = (struct ApplicationContext *) user_data;
 
     if (!(options->options_mask & CLIENT_MODE_SET)) {
         if (connection_status != TOX_CONNECTION_NONE) {
-            if (toxvpn_request_membership(tox, options->toxvpn_id, friend_id, TOXVPN_MEMBERSHIP_ACCEPT) == TOX_ERR_FRIEND_CUSTOM_PACKET_OK) {
+            if (toxvpn_request_membership(options->vpn_context, options->toxvpn_id, friend_id, TOXVPN_MEMBERSHIP_ACCEPT) == TOX_ERR_FRIEND_CUSTOM_PACKET_OK) {
                 tox_trace(tox, "toxvpn invite has been sent to friend %u", friend_id);
             }
             else {
@@ -108,7 +125,7 @@ static void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t 
     char *secret_str = bin_to_hex_str(data, length);
     tox_trace(tox, "received Tox friend request from %lX with attached secret \"%s\"", *((uint64_t*) pk), secret_str);
 
-    if (length == sizeof(options.secret) && memcmp(options.secret, data, sizeof options.secret) == 0) {
+    if (length == sizeof(app_context.secret) && memcmp(app_context.secret, data, sizeof app_context.secret) == 0) {
         TOX_ERR_FRIEND_ADD error;
         uint32_t friendnumber = tox_friend_add_norequest(tox, pk, &error);
         char *pk_str = bin_to_hex_str(pk, TOX_PUBLIC_KEY_SIZE);
@@ -123,15 +140,16 @@ static void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t 
     free(secret_str);
 }
 
-static void on_membership_request(Tox *tox, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata)
+static void on_membership_request(ToxVPNContext *context, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata)
 {
-    tox_trace(tox, "received request - toxvpn_id: %X, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
-    toxvpn_response_membership(tox, toxvpn_id, friendnumber, TOXVPN_MEMBERSHIP_ACCEPT);
+//    ApplicationContext *options = static_cast<ApplicationContext *>(userdata);
+    tox_trace(context->tox, "received request - toxvpn_id: %X, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
+    toxvpn_response_membership(context, toxvpn_id, friendnumber, TOXVPN_MEMBERSHIP_ACCEPT);
 }
 
-static void on_membership_response(Tox *tox, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata)
+static void on_membership_response(ToxVPNContext *context, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata)
 {
-    tox_trace(tox, "Received membership response - toxvpn_id: %d, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
+    tox_trace(context->tox, "Received membership response - toxvpn_id: %d, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
 }
 
 void print_usage(int argc, char **argv)
@@ -140,7 +158,7 @@ void print_usage(int argc, char **argv)
     fprintf(stderr, help_message);
 }
 
-int check_arguments(struct Context *options)
+int check_arguments(struct ApplicationContext *options)
 {
     if (options->options_mask & CLIENT_MODE_SET)
     {
@@ -154,7 +172,7 @@ int check_arguments(struct Context *options)
     }
 }
 
-int parse_bootstrap_node(const char *arg, struct Context *options)
+int parse_bootstrap_node(const char *arg, struct ApplicationContext *options)
 {
     char *arg_dup = strdup(arg);
     static const char *delim= ":";
@@ -186,7 +204,7 @@ getout:
     return token == NULL ? -1 : 0;
 }
 
-int parse_subnet(const char *addr, struct Context *options)
+int parse_subnet(const char *addr, struct ApplicationContext *options)
 {
     char *stringp = strdup(addr);
     char *token =  strtok(stringp, "/");
@@ -210,7 +228,7 @@ int parse_subnet(const char *addr, struct Context *options)
     return 0;
 }
 
-int parse_proxy(const char *arg, struct Context *opt)
+int parse_proxy(const char *arg, struct ApplicationContext *opt)
 {
     char *arg_dup = strdup(arg);
     static const char *delim= ":/";
@@ -237,9 +255,9 @@ getout:
     return token == NULL ? -1 : 0;
 }
 
-int parse_arguments(int argc, char **argv, struct Context *options)
+int parse_arguments(int argc, char **argv, struct ApplicationContext *options)
 {
-    bzero(options, sizeof(struct Context));
+    bzero(options, sizeof(struct ApplicationContext));
 
     uint8_t *converted;
     int c;
@@ -339,7 +357,7 @@ static const char* settings_get_toxvpn_config_path(const char *path)
     return settings_path;
 }
 
-Tox* create_tox_context(struct Context *options)
+Tox* create_tox_context(struct ApplicationContext *options)
 {
     size_t settings_size = 0;
     uint8_t *settings_data = NULL;
@@ -353,7 +371,7 @@ Tox* create_tox_context(struct Context *options)
         FILE *file = fopen(settings_get_toxcore_config_path(options->settings_path_pattern), "rb+");
         if (file != NULL) {
             settings_size = file_get_size(file);
-            settings_data = calloc(settings_size, sizeof(uint8_t));
+            settings_data = new uint8_t[settings_size];
 
             if (fread(settings_data, 1, settings_size, file) != settings_size) {
                 free(settings_data);
@@ -379,39 +397,49 @@ Tox* create_tox_context(struct Context *options)
     assert(tox);
     free(settings_data);
 
-    toxvpn_callback_membership_request(tox, on_membership_request, options);
-    toxvpn_callback_membership_response(tox, on_membership_response, options);
     tox_callback_friend_request(tox, on_accept_friend_request, options);
     tox_callback_friend_connection_status(tox, on_fiend_connection_status_cnaged, options);
     tox_self_get_address(tox, options->self_address);
 
+    return tox;
+}
 
-    if (options->options_mask & SETTINGS_FILE_SET) {
-        assert(strlen(options->settings_path_pattern) > 0);
+ToxVPNContext* create_vpn_context(Tox *tox, ApplicationContext *context)
+{
+    ToxVPNContext *vpn_context = toxvpn_create_context(tox);
+    assert(vpn_context);
 
-        FILE *file = fopen(settings_get_toxvpn_config_path(options->settings_path_pattern), "rb+");
+    context->vpn_context = vpn_context;
+
+    toxvpn_callback_membership_request(context->vpn_context, on_membership_request, context);
+    toxvpn_callback_membership_response(context->vpn_context, on_membership_response, context);
+
+    if (context->options_mask & SETTINGS_FILE_SET) {
+        assert(strlen(context->settings_path_pattern) > 0);
+
+        FILE *file = fopen(settings_get_toxvpn_config_path(context->settings_path_pattern), "rb+");
         if (file != NULL) {
-            settings_size = file_get_size(file);
-            settings_data = calloc(settings_size, sizeof(uint8_t));
-            toxvpn_settings_load(tox, settings_data, settings_size);
+            size_t settings_size = file_get_size(file);
+            uint8_t *settings_data = new uint8_t[settings_size];
+            toxvpn_settings_load(vpn_context, settings_data, settings_size);
             fclose(file);
             free(settings_data);
         }
     }
 
-    return tox;
+    return vpn_context;
 }
 
-bool settings_save(const Tox *tox, const char *filename)
+bool settings_save(const ApplicationContext *context, const char *filename)
 {
     FILE *file = fopen(settings_get_toxcore_config_path(filename), "wb");
     if (!file) {
         return false;
     }
 
-    size_t size = tox_get_savedata_size(tox);
-    uint8_t *savedata = calloc(size, 1);
-    tox_get_savedata(tox, savedata);
+    size_t size = tox_get_savedata_size(context->vpn_context->tox);
+    uint8_t *savedata = new uint8_t[size];
+    tox_get_savedata(context->vpn_context->tox, savedata);
 
     const bool status = fwrite(savedata, size, 1, file) != size;
     free(savedata);
@@ -422,7 +450,7 @@ bool settings_save(const Tox *tox, const char *filename)
         return false;
     }
 
-    char *toxpvn_json_settings = toxvpn_settings_dump(tox);
+    char *toxpvn_json_settings = toxvpn_settings_dump(context->vpn_context);
     fprintf(file, "%s", toxpvn_json_settings);
     free(toxpvn_json_settings);
 
@@ -435,56 +463,53 @@ int main(int argc, char *argv[])
     signal(SIGINT, singnal_handler);
     signal(SIGTERM, singnal_handler);
 
-    if (parse_arguments(argc, argv, &options) != 0)
+    if (parse_arguments(argc, argv, &app_context) != 0)
     {
         print_usage(argc, argv);
         return 0;
     }
 
-    Tox *tox = create_tox_context(&options);
-
-    if (options.options_mask & NAME_SET) {
-        tox_self_set_name(tox, options.name, options.name_size, NULL);
+    Tox *tox = create_tox_context(&app_context);
+    if (app_context.options_mask & NAME_SET) {
+        tox_self_set_name(tox, app_context.name, app_context.name_size, NULL);
     }
 
-    if (!toxvpn_attach(tox)) {
-        tox_trace(tox, "can't initialize toxvpn context");
-        return -2;
-    }
+    ToxVPNContext *vpn_context = create_vpn_context(tox, &app_context);
 
-    char *address_str = bin_to_hex_str(options.self_address, sizeof(options.self_address));
+
+    char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
     tox_trace(tox, "tox address: %s", address_str);
     free(address_str);
-    options.options_mask |= ADDRESS_SET;
+    app_context.options_mask |= ADDRESS_SET;
 
-    if (options.options_mask & BOOTSTRAP_NODE_SET) {
-        assert(options.dht_bootstrap_node.pk);
+    if (app_context.options_mask & BOOTSTRAP_NODE_SET) {
+        assert(app_context.dht_bootstrap_node.pk);
         TOX_ERR_BOOTSTRAP error;
-        char *bs_node_address_str = bin_to_hex_str(options.dht_bootstrap_node.pk, TOX_PUBLIC_KEY_SIZE);
-        tox_trace(tox, "dht bootstrap node is %s:%hu, tox address: %s", options.dht_bootstrap_node.host, options.dht_bootstrap_node.port, bs_node_address_str);
-        if (!tox_bootstrap(tox, options.dht_bootstrap_node.host, options.dht_bootstrap_node.port, options.dht_bootstrap_node.pk, &error)) {
+        char *bs_node_address_str = bin_to_hex_str(app_context.dht_bootstrap_node.pk, TOX_PUBLIC_KEY_SIZE);
+        tox_trace(tox, "dht bootstrap node is %s:%hu, tox address: %s", app_context.dht_bootstrap_node.host, app_context.dht_bootstrap_node.port, bs_node_address_str);
+        if (!tox_bootstrap(tox, app_context.dht_bootstrap_node.host, app_context.dht_bootstrap_node.port, app_context.dht_bootstrap_node.pk, &error)) {
             tox_trace(tox, "can't use bootstap node: %d", error);
         }
         free(bs_node_address_str);
     }
 
-    if (!(options.options_mask & CLIENT_MODE_SET)) { //server node logic here
-        options.toxvpn_id = toxvpn_new(tox, options.subnet, options.prefixlen);
-        if (options.toxvpn_id == UINT32_MAX)
+    if (!(app_context.options_mask & CLIENT_MODE_SET)) { //server node logic here
+        app_context.toxvpn_id = toxvpn_new(vpn_context, app_context.subnet, app_context.prefixlen);
+        if (app_context.toxvpn_id == UINT32_MAX)
         {
             tox_trace(tox, "can't create toxvpn interface");
             return -20;
         }
     } else {
         TOX_ERR_FRIEND_ADD error;
-        if (tox_friend_add(tox, options.server_address, options.secret, sizeof(options.secret), &error) == UINT32_MAX) {
+        if (tox_friend_add(tox, app_context.server_address, app_context.secret, sizeof(app_context.secret), &error) == UINT32_MAX) {
             if (error != TOX_ERR_FRIEND_ADD_ALREADY_SENT) {
                 tox_trace(tox, "Can't add a server node: %d", error);
                 return -30;
             }
         }
 
-        char *server_address_str = bin_to_hex_str(options.server_address, sizeof(options.server_address));
+        char *server_address_str = bin_to_hex_str(app_context.server_address, sizeof(app_context.server_address));
         tox_trace(tox, "added node %s", server_address_str);
         free(server_address_str);
     }
@@ -494,7 +519,7 @@ int main(int argc, char *argv[])
 
     while (app_running) {
         tox_iterate(tox);
-        toxvpn_iterate(tox);
+        toxvpn_events_loop(vpn_context);
 
         if (!connected_to_dht) {
             connected_to_dht = tox_self_get_connection_status(tox) != TOX_CONNECTION_NONE;
@@ -503,7 +528,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (options.options_mask & CLIENT_MODE_SET) { //client node logic here
+        if (app_context.options_mask & CLIENT_MODE_SET) { //client node logic here
             if (!approved && tox_friend_get_connection_status(tox, 0, NULL) != TOX_CONNECTION_NONE) {
                 approved = 1;
                 tox_trace(tox, "Friend %d connected", 0);
@@ -513,12 +538,12 @@ int main(int argc, char *argv[])
         usleep(300);
     }
 
-    if (options.options_mask & SETTINGS_FILE_SET) {
-        if (settings_save(tox, options.settings_path_pattern)) {
-            tox_trace(tox, "Settings has been saved to \"%s\"", options.settings_path_pattern);
+    if (app_context.options_mask & SETTINGS_FILE_SET) {
+        if (settings_save(&app_context, app_context.settings_path_pattern)) {
+            tox_trace(tox, "Settings has been saved to \"%s\"", app_context.settings_path_pattern);
         }
         else {
-            tox_trace(tox, "Can't save settings to \"%s\": %s", options.settings_path_pattern, strerror(errno));
+            tox_trace(tox, "Can't save settings to \"%s\": %s", app_context.settings_path_pattern, strerror(errno));
         }
     }
 

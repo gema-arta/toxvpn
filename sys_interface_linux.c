@@ -21,7 +21,7 @@
 #endif
 
 #include <assert.h>
-
+#include "util.h"
 
 static int sysnet_get_permissions()
 {

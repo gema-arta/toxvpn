@@ -3,6 +3,7 @@
 #include <strings.h>
 #include <assert.h>
 #include <stdarg.h>
+#include "util.h"
 #include "vpn_member.h"
 
 void vpn_members_table_init(VPNMembersTable *table)
@@ -39,7 +40,7 @@ void vpn_members_table_add_self(VPNInterface *interface, struct VPNMembersTable 
     ip_copy(&my_member.ip, &interface->address.ip);
 
     uint8_t pk[TOX_PUBLIC_KEY_SIZE];
-    tox_self_get_public_key(interface->tox, pk);
+    tox_self_get_public_key(interface->context->tox, pk);
     memcpy(my_member.issuer_pk, pk, TOX_PUBLIC_KEY_SIZE);
     memcpy(my_member.member_pk, pk, TOX_PUBLIC_KEY_SIZE);
     my_member.update_timestamp = time(NULL);
