@@ -60,6 +60,14 @@ enum OptionFlags {
 };
 
 struct ApplicationContext{
+
+    ApplicationContext()
+    {
+        bzero(this, sizeof(*this));
+        parse_bootstrap_node(DEFAULT_BOOTSTRAP_NODE);
+        parse_subnet(DEFAULT_SUBNET);
+    }
+
     char *subnet;
     uint16_t prefixlen;
 
@@ -90,22 +98,210 @@ struct ApplicationContext{
 
     ToxVPNContext *vpn_context = nullptr;
 
+    bool running = true;
+
+    void print_usage(int argc, char **argv) const
+    {
+        fprintf(stderr, "usage: %s options", argv[0]);
+        fprintf(stderr, help_message);
+    }
+
+
+    int check_arguments() const
+    {
+        if (options_mask & CLIENT_MODE_SET)
+        {
+            const int client_mask = CLIENT_MODE_SET | SERVER_ADDRESS_SET;
+            return ((options_mask  & client_mask) == client_mask);
+        }
+        else
+        {
+            const int server_mask = 0;
+            return ((options_mask & server_mask) == server_mask);
+        }
+    }
+
+    int parse_bootstrap_node(const char *arg)
+    {
+        char *arg_dup = strdup(arg);
+        static const char *delim= ":";
+        char *token = strtok(arg_dup, delim);
+
+        if (!token) {
+            goto getout;
+        }
+        dht_bootstrap_node.host = strdup(token);
+
+        token = strtok(NULL, delim);
+        if (!token) {
+            goto getout;
+        }
+        dht_bootstrap_node.port = atoi(token);
+
+        token = strtok(NULL, delim);
+        if (!token) {
+            goto getout;
+        }
+        if (strlen(token)/2 != TOX_PUBLIC_KEY_SIZE) {
+            fprintf(stderr, "invlalid public key size: %lu\n", strlen(token)/2);
+            goto getout;
+        }
+        dht_bootstrap_node.pk = hex_string_to_bin(token);
+
+    getout:
+        free(arg_dup);
+        return token == NULL ? -1 : 0;
+    }
+
+    int parse_subnet(const char *addr)
+    {
+        char *stringp = strdup(addr);
+        char *token =  strtok(stringp, "/");
+        if (token != NULL) {
+            subnet = strdup(token);
+        }
+        else {
+            free(stringp);
+            return 1;
+        }
+
+        token = strtok(NULL, "/");
+        if (token != NULL) {
+            prefixlen = atoi(token);
+        }
+        else {
+            prefixlen = 24;
+        }
+
+        free(stringp);
+        return 0;
+    }
+
+    int parse_proxy(const char *arg)
+    {
+        char *arg_dup = strdup(arg);
+        static const char *delim= ":/";
+        char *token = strtok(arg_dup, delim);
+
+        if (!token) {
+            goto getout;
+        }
+        this->proxy.type = strcmp(token, "socks") == 0 ? TOX_PROXY_TYPE_SOCKS5 : TOX_PROXY_TYPE_HTTP;
+
+        if (!token) {
+            goto getout;
+        }
+
+        this->proxy.host = strdup(token);
+
+        token = strtok(NULL, delim);
+        if (!token) {
+            goto getout;
+        }
+        this->proxy.port = atoi(token);
+
+    getout:
+        free(arg_dup);
+        return token == NULL ? -1 : 0;
+    }
+
+    int parse_arguments(int argc, char **argv)
+    {
+        ApplicationContext *app_context = this;
+
+        uint8_t *converted;
+        int c;
+        while ((c = getopt (argc, argv, "hn:p:s:c:b:f:")) != -1) {
+            switch (c)
+            {
+            case 'p':
+                if (!parse_proxy(optarg)) {
+                    app_context->options_mask |= PROXY_SET;
+                }
+                else {
+                    fprintf(stderr, "invalid proxy server\n");
+                    return -2;
+                }
+                break;
+            case 'n':
+                if (!parse_subnet(optarg)) {
+                    app_context->options_mask |= SUBNET_SET;
+                }
+                else {
+                    fprintf(stderr, "can't parse subnet address/prefix %s %hu\n", app_context->subnet, app_context->prefixlen);
+                    return -2;
+                }
+                break;
+            case 'b':
+                if (parse_bootstrap_node(optarg)) {
+                    fprintf(stderr, "can't parse bootstrap node address\n");
+                    return -2;
+                }
+                else {
+                    app_context->options_mask |= BOOTSTRAP_NODE_SET;
+                }
+
+            case 's':
+                bzero(app_context->secret, sizeof app_context->secret);
+                converted = hex_string_to_bin(optarg);
+                memcpy(app_context->secret, converted, min(sizeof(app_context->secret), strlen(optarg)/2));
+                free(converted);
+                app_context->options_mask |= SECRET_SET;
+                break;
+            case 'f':
+                app_context->settings_path_pattern = optarg;
+                app_context->options_mask |= SETTINGS_FILE_SET;
+                break;
+            case 'c':
+                if (strlen(optarg)/2 != TOX_ADDRESS_SIZE)
+                {
+                    fprintf(stderr, "Invalid server node address size: %lu\n", strlen(optarg)/2);
+                    return -2;
+                }
+
+                converted = hex_string_to_bin(optarg);
+                memcpy(app_context->server_address, converted, sizeof(app_context->server_address));
+                free(converted);
+                app_context->options_mask |= (SERVER_ADDRESS_SET | CLIENT_MODE_SET);
+                break;
+            case 'h':
+                return 1;
+            case '?':
+                return 1;
+            default:
+               return -1;
+            }
+        }
+
+        if (!check_arguments())
+        {
+            fprintf(stderr, "Not all arguments supplied correctly: %X\n", app_context->options_mask);
+            return 2;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+
 } app_context;
 
-bool app_running = true;
+
 
 void singnal_handler(int signal_code)
 {
     switch (signal_code) {
     case SIGINT:
     case SIGTERM:
-        app_running = false;
+        app_context.running = false;
         break;
     default:
         trace("received unexpected signal %d", signal_code);
         break;
     }
 }
+
 
 static void on_fiend_connection_status_cnaged(Tox *tox, uint32_t friend_id, TOX_CONNECTION connection_status, void *user_data)
 {
@@ -156,185 +352,6 @@ static void on_membership_response(ToxVPNContext *context, int32_t toxvpn_id, in
     tox_trace(context->tox, "Received membership response - toxvpn_id: %d, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
 }
 
-void print_usage(int argc, char **argv)
-{
-    fprintf(stderr, "usage: %s options", argv[0]);
-    fprintf(stderr, help_message);
-}
-
-int check_arguments(struct ApplicationContext *options)
-{
-    if (options->options_mask & CLIENT_MODE_SET)
-    {
-        const int client_mask = CLIENT_MODE_SET | SERVER_ADDRESS_SET;
-        return ((options->options_mask  & client_mask) == client_mask);
-    }
-    else
-    {
-        const int server_mask = 0;
-        return ((options->options_mask & server_mask) == server_mask);
-    }
-}
-
-int parse_bootstrap_node(const char *arg, struct ApplicationContext *options)
-{
-    char *arg_dup = strdup(arg);
-    static const char *delim= ":";
-    char *token = strtok(arg_dup, delim);
-
-    if (!token) {
-        goto getout;
-    }
-    options->dht_bootstrap_node.host = strdup(token);
-
-    token = strtok(NULL, delim);
-    if (!token) {
-        goto getout;
-    }
-    options->dht_bootstrap_node.port = atoi(token);
-
-    token = strtok(NULL, delim);
-    if (!token) {
-        goto getout;
-    }
-    if (strlen(token)/2 != TOX_PUBLIC_KEY_SIZE) {
-        fprintf(stderr, "invlalid public key size: %lu\n", strlen(token)/2);
-        goto getout;
-    }
-    options->dht_bootstrap_node.pk = hex_string_to_bin(token);
-
-getout:
-    free(arg_dup);
-    return token == NULL ? -1 : 0;
-}
-
-int parse_subnet(const char *addr, struct ApplicationContext *options)
-{
-    char *stringp = strdup(addr);
-    char *token =  strtok(stringp, "/");
-    if (token != NULL) {
-        options->subnet = strdup(token);
-    }
-    else {
-        free(stringp);
-        return 1;
-    }
-
-    token = strtok(NULL, "/");
-    if (token != NULL) {
-        options->prefixlen = atoi(token);
-    }
-    else {
-        options->prefixlen = 24;
-    }
-
-    free(stringp);
-    return 0;
-}
-
-int parse_proxy(const char *arg, struct ApplicationContext *opt)
-{
-    char *arg_dup = strdup(arg);
-    static const char *delim= ":/";
-    char *token = strtok(arg_dup, delim);
-
-    if (!token) {
-        goto getout;
-    }
-    opt->proxy.type = strcmp(token, "socks") == 0 ? TOX_PROXY_TYPE_SOCKS5 : TOX_PROXY_TYPE_HTTP;
-
-    if (!token) {
-        goto getout;
-    }
-    opt->proxy.host = strdup(token);
-
-    token = strtok(NULL, delim);
-    if (!token) {
-        goto getout;
-    }
-    opt->proxy.port = atoi(token);
-
-getout:
-    free(arg_dup);
-    return token == NULL ? -1 : 0;
-}
-
-int parse_arguments(int argc, char **argv, struct ApplicationContext *options)
-{
-    uint8_t *converted;
-    int c;
-    while ((c = getopt (argc, argv, "hn:p:s:c:b:f:")) != -1) {
-        switch (c)
-        {
-        case 'p':
-            if (!parse_proxy(optarg, options)) {
-                options->options_mask |= PROXY_SET;
-            }
-            else {
-                fprintf(stderr, "invalid proxy server\n");
-                return -2;
-            }
-            break;
-        case 'n':
-            if (!parse_subnet(optarg, options)) {
-                options->options_mask |= SUBNET_SET;
-            }
-            else {
-                fprintf(stderr, "can't parse subnet address/prefix %s %hu\n", options->subnet, options->prefixlen);
-                return -2;
-            }
-            break;
-        case 'b':
-            if (parse_bootstrap_node(optarg, options)) {
-                fprintf(stderr, "can't parse bootstrap node address\n");
-                return -2;
-            }
-            else {
-                options->options_mask |= BOOTSTRAP_NODE_SET;
-            }
-
-        case 's':
-            bzero(options->secret, sizeof options->secret);
-            converted = hex_string_to_bin(optarg);
-            memcpy(options->secret, converted, min(sizeof(options->secret), strlen(optarg)/2));
-            free(converted);
-            options->options_mask |= SECRET_SET;
-            break;
-        case 'f':
-            options->settings_path_pattern = optarg;
-            options->options_mask |= SETTINGS_FILE_SET;
-            break;
-        case 'c':
-            if (strlen(optarg)/2 != TOX_ADDRESS_SIZE)
-            {
-                fprintf(stderr, "Invalid server node address size: %lu\n", strlen(optarg)/2);
-                return -2;
-            }
-
-            converted = hex_string_to_bin(optarg);
-            memcpy(options->server_address, converted, sizeof(options->server_address));
-            free(converted);
-            options->options_mask |= (SERVER_ADDRESS_SET | CLIENT_MODE_SET);
-            break;
-        case 'h':
-            return 1;
-        case '?':
-            return 1;
-        default:
-           return -1;
-        }
-    }
-
-    if (!check_arguments(options))
-    {
-        fprintf(stderr, "Not all arguments supplied correctly: %X\n", options->options_mask);
-        return 2;
-    }
-    else
-    {
-        return 0;
-    }
-}
 
 size_t file_get_size(FILE *file)
 {
@@ -468,19 +485,15 @@ bool settings_save(const ApplicationContext *context, const char *filename)
     return status;
 }
 
+
 int main(int argc, char *argv[])
 {
     signal(SIGINT, singnal_handler);
     signal(SIGTERM, singnal_handler);
 
-
-    bzero(&app_context, sizeof(struct ApplicationContext));
-    parse_bootstrap_node(DEFAULT_BOOTSTRAP_NODE, &app_context);
-    parse_subnet(DEFAULT_SUBNET, &app_context);
-
-    if (parse_arguments(argc, argv, &app_context) != 0)
+    if (app_context.parse_arguments(argc, argv) != 0)
     {
-        print_usage(argc, argv);
+        app_context.print_usage(argc, argv);
         return 0;
     }
 
@@ -537,7 +550,7 @@ int main(int argc, char *argv[])
     bool connected_to_dht = 0;
     int approved = 0;
 
-    while (app_running) {
+    while (app_context.running) {
         tox_iterate(tox);
         toxvpn_events_loop(vpn_context);
 
