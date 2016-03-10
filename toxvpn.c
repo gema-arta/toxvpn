@@ -528,9 +528,11 @@ static int toxvpn_friend_rem(Tox *tox, uint32_t toxvpn_id, uint32_t friendnumber
 ToxVPNContext *toxvpn_create_context(Tox *tox)
 {
     assert(tox);
+
     ToxVPNContext *context = (ToxVPNContext*) malloc(sizeof(struct ToxVPNContext));
     memset(context, 0x0, sizeof(*context));
 
+    context->tox = tox;
     tox_callback_friend_lossy_packet(tox, process_packet, context);
     tox_callback_friend_lossless_packet(tox, process_packet, context);
     return context;

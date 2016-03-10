@@ -22,6 +22,10 @@
 #include "util.h"
 
 
+#define DEFAULT_BOOTSTRAP_NODE 	"144.76.60.215:33445:04119E835DF3E78BACF0F84235B300546AF8B936F035185E2A8E9E0A67C8924F"
+#define DEFAULT_SUBNET "10.0.100.0/24"
+
+
 inline void trace(const char* formator, ...) {
     FILE *file = stderr;
     va_list al;
@@ -40,7 +44,7 @@ static const char *help_message = \
     "-p <proxy>\t use socks|http://hostname:port> proxy server\n" \
     "-n <subnetwork/prefix length>\n" \
     "-b <IP:port:tox_address>\tuse bootstap node\n" \
-    "-c <address>\t connect to server using tox address\n" \
+    "-c <address>:<secret>\t connect to server using tox address\n" \
     "-f <file>\tload/save settings from/to file\n";
 
 enum OptionFlags {
@@ -167,7 +171,7 @@ int check_arguments(struct ApplicationContext *options)
     }
     else
     {
-        const int server_mask = SUBNET_SET;
+        const int server_mask = 0;
         return ((options->options_mask & server_mask) == server_mask);
     }
 }
@@ -257,8 +261,6 @@ getout:
 
 int parse_arguments(int argc, char **argv, struct ApplicationContext *options)
 {
-    bzero(options, sizeof(struct ApplicationContext));
-
     uint8_t *converted;
     int c;
     while ((c = getopt (argc, argv, "hn:p:s:c:b:f:")) != -1) {
@@ -390,11 +392,19 @@ Tox* create_tox_context(struct ApplicationContext *options)
         tox_options->proxy_type = options->proxy.type;
     }
 
-    tox_options->savedata_type = TOX_SAVEDATA_TYPE_TOX_SAVE;
+
+    tox_options->savedata_type = (settings_data == 0 && settings_size == 0) ? TOX_SAVEDATA_TYPE_NONE : TOX_SAVEDATA_TYPE_TOX_SAVE;
     tox_options->savedata_data = settings_data;
     tox_options->savedata_length = settings_size;
-    Tox *tox = tox_new(tox_options, NULL);
-    assert(tox);
+
+    TOX_ERR_NEW error;
+    Tox *tox = tox_new(tox_options, &error);
+
+    if (tox == nullptr) {
+        trace("can't create toxcore context: %d", int(error));
+        return nullptr;
+    }
+
     free(settings_data);
 
     tox_callback_friend_request(tox, on_accept_friend_request, options);
@@ -463,6 +473,11 @@ int main(int argc, char *argv[])
     signal(SIGINT, singnal_handler);
     signal(SIGTERM, singnal_handler);
 
+
+    bzero(&app_context, sizeof(struct ApplicationContext));
+    parse_bootstrap_node(DEFAULT_BOOTSTRAP_NODE, &app_context);
+    parse_subnet(DEFAULT_SUBNET, &app_context);
+
     if (parse_arguments(argc, argv, &app_context) != 0)
     {
         print_usage(argc, argv);
@@ -470,6 +485,7 @@ int main(int argc, char *argv[])
     }
 
     Tox *tox = create_tox_context(&app_context);
+    assert(tox);
     if (app_context.options_mask & NAME_SET) {
         tox_self_set_name(tox, app_context.name, app_context.name_size, NULL);
     }
@@ -478,8 +494,12 @@ int main(int argc, char *argv[])
 
 
     char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
-    tox_trace(tox, "tox address: %s", address_str);
+    char *secret_str = bin_to_hex_str(app_context.secret, sizeof(app_context.secret));
+    trace("connect address %s:%s", address_str, secret_str);
+
     free(address_str);
+    free(secret_str);
+
     app_context.options_mask |= ADDRESS_SET;
 
     if (app_context.options_mask & BOOTSTRAP_NODE_SET) {
