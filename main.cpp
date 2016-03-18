@@ -249,6 +249,7 @@ bool settings_save(const ApplicationContext *context, const char *filename)
 
 int main(int argc, char *argv[])
 {
+    trace("Starting toxvpn %s", VERSION);
     signal(SIGINT, singnal_handler);
     signal(SIGTERM, singnal_handler);
 
@@ -270,7 +271,7 @@ int main(int argc, char *argv[])
 
     {
         char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
-        trace("connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
+        trace("Connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
         free(address_str);
     }
 
