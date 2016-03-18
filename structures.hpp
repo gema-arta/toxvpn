@@ -106,10 +106,13 @@ struct DHTNode {
         uint8_t *pk = hex_string_to_bin(token);
         this->pk.assign(pk, TOX_PUBLIC_KEY_SIZE);
         free(pk);
+
+        free(arg_dup);
     }
 };
 
-typedef std::vector<DHTNode> DHTNodesList;
+
+typedef vector<DHTNode> DHTNodesList;
 
 
 struct ApplicationContext

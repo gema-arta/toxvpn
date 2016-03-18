@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
             TOX_ERR_BOOTSTRAP error;
 
             const DHTNode& node = app_context.get_next_dht_node();
-            tox_trace(tox, "Bootstraping from \"%s:%h\" DHT node", node.host.c_str(), node.port);
+            tox_trace(tox, "Bootstraping from \"%s:%d\" DHT node", node.host.c_str(), (int) node.port);
 
             if (!tox_bootstrap(tox, node.host.c_str(), node.port, node.pk(), &error)) {
                 tox_trace(tox, "DHT node bootstrap failed: %d", error);

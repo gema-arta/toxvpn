@@ -20,5 +20,8 @@ $(OUTFILE): $(OBJS)
 %.o: %.cpp
 		$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+memcheck: $(OUTFILE)
+	valgrind --leak-check=full --tool=memcheck ./$<
+
 clean:
 		rm -f $(OBJS) $(OUTFILE)
