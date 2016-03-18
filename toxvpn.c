@@ -770,7 +770,7 @@ char* toxvpn_settings_dump(const ToxVPNContext *context)
     json_t *root = json_object();
     char str_buffer[256];
 
-    sprintf(str_buffer, "%u.%u", tox_version_major(), tox_version_minor());
+    sprintf(str_buffer, "%u.%u.%u", tox_version_major(), tox_version_minor(), tox_version_patch());
     json_object_set(root, "version", json_string(str_buffer));
 
     const size_t vpn_count = interface_get_count(context);
