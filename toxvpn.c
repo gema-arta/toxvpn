@@ -755,7 +755,7 @@ int toxvpn_kill(ToxVPNContext *context, uint32_t toxvpn_id)
 
 
 #define TOXVPN_SETTINGS_KEY_VPNS "vpns"
-#define TOXVPN_SETTINGS_KEY_SUBNET "subnet"
+#define TOXVPN_SETTINGS_KEY_SUBNET "address"
 #define TOXVPN_SETTINGS_KEY_SUBNETPREFIX "subnet_prefix"
 #define TOXVPN_SETTINGS_KEY_SHAREID "shareid"
 #define TOXVPN_SETTINGS_KEY_MEMBERS "members"

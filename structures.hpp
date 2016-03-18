@@ -6,7 +6,9 @@
 
 #include <vector>
 #include <string>
+#include <ctime>
 #include <tox/tox.h>
+
 
 using namespace std;
 
@@ -119,11 +121,11 @@ struct ApplicationContext
 {
 protected:
     DHTNodesList nodes;
-    DHTNodesList::const_iterator dht_node;
 
 public:
     ApplicationContext()
     {
+        srand(time(NULL));
         parse_subnet(DEFAULT_SUBNET);
     }
 
@@ -343,19 +345,11 @@ public:
         for (auto node_info: list) {
             nodes.push_back(DHTNode(node_info));
         }
-        dht_node = nodes.end() - 1;
-
         return nodes.size();
     }
 
     const DHTNode& get_next_dht_node() {
-        dht_node++;
-
-        if (dht_node == nodes.end()) {
-            dht_node = nodes.begin();
-        }
-
-        return *dht_node;
+        return nodes[rand() % nodes.size()];
     }
 };
 

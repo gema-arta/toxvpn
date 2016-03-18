@@ -67,22 +67,21 @@ void on_fiend_connection_status_cnaged(Tox *tox, uint32_t friend_id, TOX_CONNECT
     assert(user_data);
     struct ApplicationContext *options = (struct ApplicationContext *) user_data;
 
-    if (connection_status != TOX_CONNECTION_NONE) {
-        if (toxvpn_request_membership(options->vpn_context, options->toxvpn_id, friend_id, TOXVPN_MEMBERSHIP_ACCEPT) == TOX_ERR_FRIEND_CUSTOM_PACKET_OK) {
-            tox_trace(tox, "connection with friend %u is established via %s", friend_id, get_transport_name(connection_status));
-        } else {
-            tox_trace(tox, "friend request has been rejected by %u", friend_id);
-        }
 
+    if (connection_status != TOX_CONNECTION_NONE) {
+        tox_trace(tox, "Connected friend %u via %s", friend_id, get_transport_name(connection_status));
+        if (!toxvpn_request_membership(options->vpn_context, options->toxvpn_id, friend_id, TOXVPN_MEMBERSHIP_ACCEPT)) {
+            tox_trace(tox, "Can't send a VPN join request to %u", friend_id);
+        }
     } else {
-        tox_trace(tox, "connection with friend %u was broken", friend_id);
+        tox_trace(tox, "Connection with friend %u was broken", friend_id);
     }
 }
 
 void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t *data, size_t length, void *userdata)
 {
     char *secret_str = bin_to_hex_str(data, length);
-    tox_trace(tox, "received Tox friend request from %lX with attached secret \"%s\"", *((uint64_t*) pk), secret_str);
+    tox_trace(tox, "Received Tox friend request from %lX with attached secret \"%s\"", *((uint64_t*) pk), secret_str);
 
     //TODO: replace by secure memcpy (timing atack)
     if (length == sizeof(app_context.secret) && memcmp(app_context.secret, data, sizeof app_context.secret) == 0) {
@@ -92,8 +91,7 @@ void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t *data, 
         tox_trace(tox, "Approved friend %u with PK %s", friendnumber, pk_str);
         free(pk_str);
     }
-    else
-    {
+    else {
         tox_trace(tox, "Secrets doesn't match");
     }
 
@@ -164,7 +162,7 @@ Tox* create_tox_context(struct ApplicationContext *options)
     }
 
     if (options->options_mask & PROXY_SET) {
-        tox_trace(NULL, "proxy settings - host: %s, port: %hu, type: %d", options->proxy.host, (uint16_t) options->proxy.port, options->proxy.type);
+        tox_trace(NULL, "Proxy settings - host: %s, port: %hu, type: %d", options->proxy.host, (uint16_t) options->proxy.port, options->proxy.type);
         tox_options->proxy_host = options->proxy.host;
         tox_options->proxy_port = options->proxy.port;
         tox_options->proxy_type = options->proxy.type;
@@ -179,7 +177,7 @@ Tox* create_tox_context(struct ApplicationContext *options)
     Tox *tox = tox_new(tox_options, &error);
 
     if (tox == nullptr) {
-        trace("can't create toxcore context: %d", int(error));
+        trace("Can't create toxcore context: %d", int(error));
         return nullptr;
     }
 
@@ -302,7 +300,7 @@ int main(int argc, char *argv[])
     time_t dht_try_ts = 0;
 
     while (app_context.running) {
-        if (tox_self_get_connection_status(tox) == TOX_CONNECTION_NONE && time(NULL) - dht_try_ts > 10 /* try new dht node each x seconds */) {
+        if (tox_self_get_connection_status(tox) == TOX_CONNECTION_NONE && time(NULL) - dht_try_ts > 5 /* try new dht node each x seconds */) {
             TOX_ERR_BOOTSTRAP error;
 
             const DHTNode& node = app_context.get_next_dht_node();
@@ -317,7 +315,7 @@ int main(int argc, char *argv[])
 
         tox_iterate(tox);
         toxvpn_events_loop(vpn_context);
-        usleep(300);
+        usleep(50);
     }
 
     if (app_context.options_mask & SETTINGS_FILE_SET) {
