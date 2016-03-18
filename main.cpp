@@ -249,7 +249,7 @@ bool settings_save(const ApplicationContext *context, const char *filename)
 
 int main(int argc, char *argv[])
 {
-    trace("Starting toxvpn %s", VERSION);
+    trace("Starting toxvpn %s %s", VERSION, REVISION);
     signal(SIGINT, singnal_handler);
     signal(SIGTERM, singnal_handler);
 
