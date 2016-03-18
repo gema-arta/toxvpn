@@ -48,3 +48,18 @@ char *bin_to_hex_str(const uint8_t *bin, size_t size)
     }
     return result_str;
 }
+
+
+const char *get_transport_name(TOX_CONNECTION connection_status)
+{
+    switch (connection_status) {
+        case TOX_CONNECTION_NONE:
+        return "none";
+    case TOX_CONNECTION_UDP:
+        return "UDP";
+    case TOX_CONNECTION_TCP:
+        return "TCP";
+    default:
+        return "unknown";
+    }
+}

@@ -50,11 +50,11 @@ void singnal_handler(int signal_code)
     }
 }
 
-
 namespace Callbacks {
+
 void connection_status_changed(Tox *tox, TOX_CONNECTION connection_status, void *user_data) {
     if (connection_status != TOX_CONNECTION_NONE) {
-        tox_trace(tox, "connected to dht - connection type: %d", connection_status);
+        tox_trace(tox, "connected to dht via %s", get_transport_name(connection_status));
     }
     else {
         tox_trace(tox, "disconnected from dht node");
@@ -69,11 +69,13 @@ void on_fiend_connection_status_cnaged(Tox *tox, uint32_t friend_id, TOX_CONNECT
 
     if (connection_status != TOX_CONNECTION_NONE) {
         if (toxvpn_request_membership(options->vpn_context, options->toxvpn_id, friend_id, TOXVPN_MEMBERSHIP_ACCEPT) == TOX_ERR_FRIEND_CUSTOM_PACKET_OK) {
-            tox_trace(tox, "connection with friend %u is established", friend_id);
+            tox_trace(tox, "connection with friend %u is established via %s", friend_id, get_transport_name(connection_status));
+        } else {
+            tox_trace(tox, "friend request has been rejected by %u", friend_id);
         }
-        else {
-            tox_trace(tox, "connection with friend %u was broken", friend_id);
-        }
+
+    } else {
+        tox_trace(tox, "connection with friend %u was broken", friend_id);
     }
 }
 
