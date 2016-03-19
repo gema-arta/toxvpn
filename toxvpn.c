@@ -765,6 +765,7 @@ int toxvpn_kill(ToxVPNContext *context, uint32_t toxvpn_id)
 #define TOXVPN_SETTINGS_KEY_STATUS "update_timestamp"
 #define TOXVPN_SETTINGS_KEY_IP "ip"
 
+
 char* toxvpn_settings_dump(const ToxVPNContext *context)
 {
     json_t *root = json_object();
@@ -831,6 +832,7 @@ char* toxvpn_settings_dump(const ToxVPNContext *context)
 
     return json_dumps(root, 0);
 }
+
 
 bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t size)
 {

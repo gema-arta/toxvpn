@@ -4,11 +4,17 @@
 #define SECRET_SIZE 32
 #define DEFAULT_SUBNET "10.0.100.0/24"
 
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200112L
+#endif
+
 #include <vector>
 #include <string>
 #include <ctime>
 #include <tox/tox.h>
-
+#include <climits>
+#include <unistd.h>
+#include <cassert>
 
 using namespace std;
 
@@ -350,6 +356,18 @@ public:
 
     const DHTNode& get_next_dht_node() {
         return nodes[rand() % nodes.size()];
+    }
+
+    static const char* get_host_name() {
+        static char hostname[TOX_MAX_NAME_LENGTH];
+        memset(hostname, 0x0, sizeof(hostname));
+
+        if (!gethostname(hostname, sizeof(TOX_MAX_NAME_LENGTH))) {
+            return hostname;
+        } else {
+            return nullptr;
+        }
+
     }
 };
 

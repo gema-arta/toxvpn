@@ -1,7 +1,11 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#define _POSIX_C_SOURCE 200900
+
+#include "toxvpn.h"
+#include "util.h"
+#include "resources.hpp"
+#include "structures.hpp"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -20,10 +24,6 @@
 #include <ctime>
 #include <tox/tox.h>
 
-#include "toxvpn.h"
-#include "util.h"
-#include "resources.hpp"
-#include "structures.hpp"
 
 inline void trace(const char* formator, ...) {
     FILE *file = stderr;
@@ -187,6 +187,12 @@ Tox* create_tox_context(struct ApplicationContext *options)
     tox_callback_friend_connection_status(tox, Callbacks::on_fiend_connection_status_cnaged, options);
     tox_self_get_address(tox, options->self_address);
     tox_callback_self_connection_status(tox, Callbacks::connection_status_changed, NULL);
+
+    const char *name = ApplicationContext::get_host_name();
+    if (name) {
+        tox_self_set_name(tox, (const uint8_t*) name, strlen(name) + 1, NULL);
+    }
+
     return tox;
 }
 
