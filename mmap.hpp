@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 class MemoryMappedFile {
 protected:
@@ -22,12 +23,13 @@ public:
 
     ~MemoryMappedFile() {
         unmap();
+        unlink(file_name.c_str());
     }
 
     void unmap() {
         if (address) {
             if (munmap(address, length)) {
-                Util::trace("can't unmap file \"%s\": %s", file_name.c_str(), strerror(errno));
+                Util::trace("Failed to unmap file \"%s\": %s", file_name.c_str(), strerror(errno));
             }
 
             address = nullptr;
@@ -35,7 +37,7 @@ public:
 
         if (fd != -1) {
             if (close(fd)) {
-                Util::trace("can't close mmaped file \"%s\": %s", file_name.c_str(), strerror(errno));
+                Util::trace("Failed to close mmaped file \"%s\": %s", file_name.c_str(), strerror(errno));
             }
             fd = -1;
         }
@@ -46,23 +48,31 @@ public:
     }
 
     bool map(const string &content) {
+        assert(!content.empty());
+
         if (address) {
             munmap(address, length);
         }
 
         fd = open(file_name.c_str(), O_RDWR | O_CREAT);
         if (fd == -1) {
-            Util::trace("can't create a file \"%s\": %s", file_name.c_str(), strerror(errno));
+            Util::trace("Failed create a file \"%s\": %s", file_name.c_str(), strerror(errno));
             return false;
         }
 
+        ftruncate(fd, content.size());
+
         length = content.size();
-        address = mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        address = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (address == MAP_FAILED) {
             address = nullptr;
-            Util::trace("can't map a file \"%s\" to memory: %s", file_name.c_str(), strerror(errno));
+            Util::trace("Failed map a file \"%s\" to memory: %s", file_name.c_str(), strerror(errno));
+            return false;
         }
-        return address != nullptr;
+
+        sprintf((char*) address, content.c_str());
+
+        return true;
     }
 };
 

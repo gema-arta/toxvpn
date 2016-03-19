@@ -165,6 +165,10 @@ static VPNInterface *interface_create(ToxVPNContext *context, const char *subnet
     //TODO: add configuration
     i->autoadd_friends = true;
 
+    if (context->_toxvpn_members_table_changed_cb) {
+        context->_toxvpn_members_table_changed_cb(context, i->id, context->_toxvpn_members_table_changed_cb_data);
+    }
+
     return i;
 
 error:
@@ -306,7 +310,7 @@ static bool process_incoming_members_table(VPNInterface* interface, uint32_t fri
     vpn_members_table_free(&received_table);
 
     if (interface->context->_toxvpn_members_table_changed_cb) {
-        interface->context->_toxvpn_members_table_changed_cb(interface->context, interface->id, interface->context->toxvpn_members_table_changed_cb_data);
+        interface->context->_toxvpn_members_table_changed_cb(interface->context, interface->id, interface->context->_toxvpn_members_table_changed_cb_data);
     }
 
 #if DEBUG
@@ -325,7 +329,7 @@ static bool process_incoming_members_table(VPNInterface* interface, uint32_t fri
         else if (member_ptr->friendnumber == TOXVPN_FRIENDID_INVALID && interface->autoadd_friends) {
 
             member_ptr->friendnumber = tox_friend_add_norequest(interface->context->tox, member_ptr->member_pk, NULL);
-            char *pk_hex_str = bin_to_hex_str(member_ptr->member_pk, TOX_PUBLIC_KEY_SIZE);
+            char *pk_hex_str = bin_to_hex_str_alloc(member_ptr->member_pk, TOX_PUBLIC_KEY_SIZE);
 
             if (member_ptr->friendnumber == TOXVPN_FRIENDID_INVALID) {
                 tox_trace(interface->context->tox, "added friend %lu with pk \"%s\". IP: %s. Reason: new members table was received.",
@@ -795,7 +799,7 @@ char* toxvpn_settings_dump(const ToxVPNContext *context)
         json_object_set(vpn_obj, TOXVPN_SETTINGS_KEY_SUBNET, json_string(ip_ntoa(&interface->address.ip)));
         json_object_set(vpn_obj, TOXVPN_SETTINGS_KEY_SUBNETPREFIX, json_integer(interface->address.prefix));
 
-        char *shareid_str = bin_to_hex_str(interface->shareid, TOXVPN_SHAREID_SIZE);
+        char *shareid_str = bin_to_hex_str_alloc(interface->shareid, TOXVPN_SHAREID_SIZE);
 #if DEBUG
         tox_trace(tox, "dumping information about vpn \"%s\"", shareid_str);
 #endif
@@ -809,11 +813,11 @@ char* toxvpn_settings_dump(const ToxVPNContext *context)
 
             struct VPNMember *member = &interface->members_table.members[j];
 
-            char *pk_str = bin_to_hex_str(member->member_pk, TOX_PUBLIC_KEY_SIZE);
+            char *pk_str = bin_to_hex_str_alloc(member->member_pk, TOX_PUBLIC_KEY_SIZE);
             json_object_set(member_obj, TOXVPN_SETTINGS_KEY_MEMBERPK, json_string(pk_str));
             free(pk_str);
 
-            pk_str = bin_to_hex_str(member->issuer_pk, TOX_PUBLIC_KEY_SIZE);
+            pk_str = bin_to_hex_str_alloc(member->issuer_pk, TOX_PUBLIC_KEY_SIZE);
             json_object_set(member_obj, TOXVPN_SETTINGS_KEY_ISSUERPK, json_string(pk_str));
             free(pk_str);
 
@@ -832,7 +836,9 @@ char* toxvpn_settings_dump(const ToxVPNContext *context)
 
     free(vpn_ids);
 
-    return json_dumps(root, 0);
+    char *dumped = json_dumps(root, 0);
+    json_object_clear(root);
+    return dumped;
 }
 
 
@@ -852,7 +858,7 @@ bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t si
     for (int i = 0; i < json_array_size(vpns_array) && vpns_array; i++) {
         json_t *vpn_object = json_array_get(vpns_array, i);
 
-        uint8_t *shareid_str = hex_string_to_bin(json_string_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SHAREID)));
+        uint8_t *shareid_str = hex_string_to_bin_alloc(json_string_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SHAREID)));
 
         VPNInterface *interface = interface_create(context, json_string_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SUBNET)),
                          json_integer_value(json_object_get(vpn_object, TOXVPN_SETTINGS_KEY_SUBNETPREFIX)), shareid_str, true);
@@ -875,11 +881,11 @@ bool toxvpn_settings_load(ToxVPNContext *context, const uint8_t *data, size_t si
 
             addr_parse_ip(json_string_value(json_object_get(member_obj, TOXVPN_SETTINGS_KEY_IP)), &member.ip);
 
-            uint8_t *issuer_pk = hex_string_to_bin(json_string_value(json_object_get(member_obj, TOXVPN_SETTINGS_KEY_ISSUERPK)));
+            uint8_t *issuer_pk = hex_string_to_bin_alloc(json_string_value(json_object_get(member_obj, TOXVPN_SETTINGS_KEY_ISSUERPK)));
             memcpy(member.issuer_pk, issuer_pk, TOX_PUBLIC_KEY_SIZE);
             free(issuer_pk);
 
-            uint8_t *member_pk = hex_string_to_bin(json_string_value(json_object_get(member_obj, TOXVPN_SETTINGS_KEY_MEMBERPK)));
+            uint8_t *member_pk = hex_string_to_bin_alloc(json_string_value(json_object_get(member_obj, TOXVPN_SETTINGS_KEY_MEMBERPK)));
             memcpy(member.member_pk, member_pk, TOX_PUBLIC_KEY_SIZE);
             free(member_pk);
 
@@ -915,5 +921,5 @@ void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)
 void toxvpn_callback_members_table_changed(ToxVPNContext *context, void (*callback)(ToxVPNContext *, uint32_t, void *), void *userdata)
 {
     context->_toxvpn_members_table_changed_cb = callback;
-    context->toxvpn_members_table_changed_cb_data = userdata;
+    context->_toxvpn_members_table_changed_cb_data = userdata;
 }

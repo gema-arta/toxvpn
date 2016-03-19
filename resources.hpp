@@ -20,5 +20,5 @@ const vector<const char*> dht_nodes = {
 "185.25.116.107:33445:DA4E4ED4B697F2E9B000EEFE3A34B554ACD3F45F5C96EAEA2516DD7FF9AF7B43" };
 
 
-const string routing_table_path = "/var/run/toxvpn-table";
+const string routing_table_path = "/var/run/toxvpn-members";
 #endif

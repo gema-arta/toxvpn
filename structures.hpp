@@ -19,6 +19,7 @@
 #include "resources.hpp"
 #include "util.hpp"
 #include "mmap.hpp"
+#include "util.h"
 
 using namespace std;
 
@@ -54,19 +55,23 @@ public:
     using vector<T>::empty;
     using vector<T>::size;
 
-    Array() {
+    Array()
+    {
 
     }
 
-    Array(const size_t count) {
+    Array(const size_t count)
+    {
         resize(count);
     }
 
-    Array(const T *src, size_t count) {
+    Array(const T *src, size_t count)
+    {
         assign(src, count);
     }
 
-    T* operator ()() {
+    T* operator ()()
+    {
         if (empty()) {
             return nullptr;
         } else {
@@ -74,7 +79,8 @@ public:
         }
     }
 
-    const T* operator ()() const {
+    const T* operator ()() const
+    {
         if (empty()) {
             return nullptr;
         } else {
@@ -82,9 +88,27 @@ public:
         }
     }
 
-    void assign(const T *src, size_t count) {
+    void assign(const T *src, size_t count)
+    {
         resize(count);
         memcpy(&this->at(0), src, count * sizeof(T));
+    }
+
+    string to_str() const
+    {
+        return empty() ? "" : string((const char*) &this->at(0), this->size() * sizeof(T));
+    }
+
+    string to_hex() const
+    {
+        if (this->empty()) {
+            return "";
+        }
+
+        char *hex_str = bin_to_hex_str_alloc((const uint8_t*) &this->at(0), this->size() * sizeof(T));
+        string hex(hex_str);
+        free(hex_str);
+        return hex;
     }
 };
 
@@ -127,7 +151,7 @@ struct DHTNode {
             fprintf(stderr, "invlalid public key size: %lu\n", strlen(token)/2);
         }
 
-        uint8_t *pk = hex_string_to_bin(token);
+        uint8_t *pk = hex_string_to_bin_alloc(token);
         this->pk.assign(pk, TOX_PUBLIC_KEY_SIZE);
         free(pk);
 
@@ -165,6 +189,8 @@ public:
     uint32_t toxvpn_id;
     char *settings_path_pattern;
 
+    MemoryMappedFile members_table_mmap = Util::string_format("%s.%d", routing_table_path.c_str(), getpid());
+
     struct {
         char *host;
         uint16_t port;
@@ -192,7 +218,7 @@ public:
         }
 
         if (first_zero_byte_pos != (size_t) -1) {
-          char* secret_str = bin_to_hex_str(secret, first_zero_byte_pos);
+          char* secret_str = bin_to_hex_str_alloc(secret, first_zero_byte_pos);
           string result(secret_str);
           free(secret_str);
           return result;
@@ -304,7 +330,7 @@ public:
 
             case 's':
                 bzero(app_context->secret, sizeof app_context->secret);
-                converted = hex_string_to_bin(optarg);
+                converted = hex_string_to_bin_alloc(optarg);
                 memcpy(app_context->secret, converted, min(sizeof(app_context->secret), strlen(optarg)/2));
                 free(converted);
                 app_context->options_mask |= SECRET_SET;
@@ -326,14 +352,14 @@ public:
                 char* token = strtok(arg_dup, delim);
 
                 assert(token);
-                converted = hex_string_to_bin(token);
+                converted = hex_string_to_bin_alloc(token);
                 memcpy(app_context->server_address, converted, sizeof(app_context->server_address));
                 app_context->options_mask |= (SERVER_ADDRESS_SET | CLIENT_MODE_SET);
 
                 token = strtok(NULL, delim);
                 if (token) {
                     options_mask |= SECRET_SET;
-                    uint8_t *secret_data = hex_string_to_bin(token);
+                    uint8_t *secret_data = hex_string_to_bin_alloc(token);
                     memcpy(secret, secret_data, strlen(token) / 2);
                     free(secret_data);
                 }
@@ -378,7 +404,7 @@ public:
         static char hostname[TOX_MAX_NAME_LENGTH];
         memset(hostname, 0x0, sizeof(hostname));
 
-        if (!gethostname(hostname, sizeof(TOX_MAX_NAME_LENGTH))) {
+        if (!gethostname(hostname, sizeof(hostname))) {
             return hostname;
         } else {
             return nullptr;

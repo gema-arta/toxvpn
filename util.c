@@ -21,7 +21,7 @@ void tox_trace(const Tox *tox, const char* formator, ...)
 }
 
 
-uint8_t *hex_string_to_bin(const char *hex_string)
+uint8_t *hex_string_to_bin_alloc(const char *hex_string)
 {
     // byte is represented by exactly 2 hex digits, so lenth of binary string
     // is half of that of the hex one. only hex string with even length
@@ -38,15 +38,24 @@ uint8_t *hex_string_to_bin(const char *hex_string)
     return ret;
 }
 
-char *bin_to_hex_str(const uint8_t *bin, size_t size)
+
+char *bin_to_hex_str(const uint8_t *bin, size_t size, char *dst, size_t dst_size)
 {
-    char *result_str = calloc(sizeof(char), size * 2 + 1); //2 chars per byte + 1 byte for trailing '\0'
     int i;
-    for (i = 0; i < size; i++)
+    for (i = 0; i < size && i*2 < dst_size; i++)
     {
-        sprintf(result_str + i * 2, "%02X", (uint32_t) *(bin+i));
+        sprintf(dst + i * 2, "%02X", (uint32_t) *(bin+i));
     }
-    return result_str;
+
+    return dst;
+}
+
+char *bin_to_hex_str_alloc(const uint8_t *bin, size_t size)
+{
+    const size_t dst_size = size * 2 + 1;
+    char *dst = calloc(sizeof(char), dst_size); //2 chars per byte + 1 byte for trailing '\0'
+    bin_to_hex_str(bin, size, dst, dst_size);
+    return dst;
 }
 
 

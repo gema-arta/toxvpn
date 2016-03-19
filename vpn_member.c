@@ -261,7 +261,7 @@ void vpn_members_table_print(const VPNMembersTable *table, const char* message, 
 
     for (int j = 0; j < table->count; j++) {
         const struct VPNMember* member = table->members+j;
-        char *member_pk_hex = bin_to_hex_str(member->member_pk, TOX_PUBLIC_KEY_SIZE);
+        char *member_pk_hex = bin_to_hex_str_alloc(member->member_pk, TOX_PUBLIC_KEY_SIZE);
         tox_trace(NULL, "\tfriend number: %u, IP: %s, update_ts: %d, pk: %s",
                   member->friendnumber, ip_ntoa(&member->ip), member->update_timestamp, member_pk_hex);
         free(member_pk_hex);

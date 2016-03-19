@@ -29,7 +29,7 @@ typedef struct ToxVPNContext {
     void (*toxvpn_membership_response_cb)(struct ToxVPNContext *toxvpn, uint32_t, uint32_t, uint8_t, void*);
     void *toxvpn_membership_response_data;
     void (*_toxvpn_members_table_changed_cb)(struct ToxVPNContext*, uint32_t, void*);
-    void *toxvpn_members_table_changed_cb_data;
+    void *_toxvpn_members_table_changed_cb_data;
 
     BS_LIST toxvpn_interfaces;
 } ToxVPNContext;

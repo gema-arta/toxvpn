@@ -28,7 +28,61 @@
 
 static ApplicationContext app_context;
 
+namespace ToxVPN {
+    string compose_members_table(ToxVPNContext *context) {
+        string formated_result;
+
+        const size_t vpn_count = toxvpn_get_count(context);
+        Array<uint32_t> vpn_list(vpn_count);
+
+        if (!toxvpn_get_list(context, vpn_list())) {
+            return string();
+        }
+
+        for (auto vpn_id: vpn_list) {
+            const size_t friends_count = toxvpn_friend_get_count(context, vpn_id);
+            formated_result += Util::string_format("vpn %X %lu\n", vpn_id, friends_count);
+
+            Array<uint32_t> friends_list(friends_count);
+            if (!toxvpn_friend_get_list(context, vpn_id, friends_list())) {
+                Util::trace("%s: Failed to retreive vpn %u information", __FUNCTION__, vpn_id);
+                continue;
+            }
+
+            for (auto friend_id: friends_list) {
+                const char *ip = toxvpn_friend_get_ip(context, vpn_id, friend_id);
+                ByteArray friend_name;
+                ByteArray friend_pk(TOX_PUBLIC_KEY_SIZE);
+
+                if (friend_id != TOXVPN_FRIENDID_SELF) {
+                    TOX_ERR_FRIEND_QUERY err;
+                    const size_t friend_name_size = tox_friend_get_name_size(context->tox, friend_id, &err);
+
+                    if (err != TOX_ERR_FRIEND_QUERY_OK) {
+                        Util::trace("%s: Failed to retrieve friend %u information: %d", __FUNCTION__, friend_id, err);
+                        continue;
+                    }
+
+                    friend_name.resize(friend_name_size);
+                    tox_friend_get_name(context->tox, friend_id, friend_name(), nullptr);
+                    tox_friend_get_public_key(context->tox, friend_id, friend_pk(), nullptr);
+                } else {
+                    friend_name.resize(tox_self_get_name_size(context->tox));
+                    tox_self_get_name(context->tox, friend_name());
+                    tox_self_get_public_key(context->tox, friend_pk());
+                }
+
+                formated_result += Util::string_format("%s\t%s\t%s\n", ip, friend_pk.to_hex().c_str(), friend_name.to_str().c_str());
+            }
+        }
+
+        return formated_result;
+    }
+}
+
+
 namespace Callbacks {
+
 
 void connection_status_changed(Tox *tox, TOX_CONNECTION connection_status, void *user_data) {
     if (connection_status != TOX_CONNECTION_NONE) {
@@ -38,7 +92,6 @@ void connection_status_changed(Tox *tox, TOX_CONNECTION connection_status, void 
         tox_trace(tox, "disconnected from dht node");
     }
 }
-
 
 void on_fiend_connection_status_cnaged(Tox *tox, uint32_t friend_id, TOX_CONNECTION connection_status, void *user_data)
 {
@@ -58,14 +111,14 @@ void on_fiend_connection_status_cnaged(Tox *tox, uint32_t friend_id, TOX_CONNECT
 
 void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t *data, size_t length, void *userdata)
 {
-    char *secret_str = bin_to_hex_str(data, length);
+    char *secret_str = bin_to_hex_str_alloc(data, length);
     tox_trace(tox, "Received Tox friend request from %lX with attached secret \"%s\"", *((uint64_t*) pk), secret_str);
 
     //TODO: replace by secure memcpy (timing atack)
     if (length == sizeof(app_context.secret) && memcmp(app_context.secret, data, sizeof app_context.secret) == 0) {
         TOX_ERR_FRIEND_ADD error;
         uint32_t friendnumber = tox_friend_add_norequest(tox, pk, &error);
-        char *pk_str = bin_to_hex_str(pk, TOX_PUBLIC_KEY_SIZE);
+        char *pk_str = bin_to_hex_str_alloc(pk, TOX_PUBLIC_KEY_SIZE);
         tox_trace(tox, "Approved friend %u with PK %s", friendnumber, pk_str);
         free(pk_str);
     }
@@ -76,56 +129,25 @@ void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t *data, 
     free(secret_str);
 }
 
-void on_membership_request(ToxVPNContext *context, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata)
+void on_membership_request(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber, uint8_t flags, void *userdata)
 {
 //    ApplicationContext *options = static_cast<ApplicationContext *>(userdata);
-    tox_trace(context->tox, "Received request - toxvpn_id: %X, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
+    tox_trace(context->tox, "Received request - toxvpn_id: %X, friendnumber: %u, flags: %X", toxvpn_id, friendnumber, flags);
     toxvpn_response_membership(context, toxvpn_id, friendnumber, TOXVPN_MEMBERSHIP_ACCEPT);
 }
 
-void on_membership_response(ToxVPNContext *context, int32_t toxvpn_id, int32_t friendnumber, uint8_t flags, void *userdata)
+void on_membership_response(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber, uint8_t flags, void *userdata)
 {
-    tox_trace(context->tox, "Received membership response - toxvpn_id: %d, friendnumber: %d, flags: %X", toxvpn_id, friendnumber, flags);
+    tox_trace(context->tox, "Received membership response - toxvpn_id: %X, friendnumber: %u, flags: %X", toxvpn_id, friendnumber, flags);
 }
 
+void on_members_table_changed(ToxVPNContext *context, uint32_t toxvpn_id, void *userdata)
+{
+    ApplicationContext *app_context = reinterpret_cast<ApplicationContext*>(userdata);
+    string serialized_members_table = ToxVPN::compose_members_table(context);
+    app_context->members_table_mmap.map(serialized_members_table.empty() ? " " : serialized_members_table);
 }
 
-namespace ToxVPN {
-    string format_addresses_table(ToxVPNContext *context) {
-        string formated_result;
-
-        const size_t vpn_count = toxvpn_get_count(context);
-        Array<uint32_t> vpn_list(vpn_count);
-
-        if (!toxvpn_get_list(context, vpn_list())) {
-            return string();
-        }
-
-        for (auto vpn_id: vpn_list) {
-            const size_t friends_count = toxvpn_friend_get_count(context, vpn_id);
-            formated_result += Util::string_format("vpn %X %lu\n", vpn_id, friends_count);
-
-            Array<uint32_t> friends_list(friends_count);
-            if (!toxvpn_friend_get_list(context, vpn_id, friends_list())) {
-                return string();
-            }
-
-            for (auto friend_id: friends_list) {
-                const char *ip = toxvpn_friend_get_ip(context, vpn_id, friend_id);
-                ByteArray friend_name(TOX_MAX_NAME_LENGTH);
-                ByteArray friend_pk(TOX_PUBLIC_KEY_SIZE);
-
-                tox_friend_get_name(context->tox, friend_id, friend_name(), nullptr);
-                tox_friend_get_public_key(context->tox, friend_id, friend_pk(), nullptr);
-
-                formated_result += Util::string_format("%s %s %X\n",
-                                                       string((const char*) friend_name(), friend_name.size()),
-                                                       ip, friend_id);
-            }
-        }
-
-        return formated_result;
-    }
 }
 
 void singnal_handler(int signal_code)
@@ -195,6 +217,7 @@ Tox* create_tox_context(struct ApplicationContext *options)
 
     TOX_ERR_NEW error;
     Tox *tox = tox_new(tox_options, &error);
+    free(tox_options);
 
     if (tox == nullptr) {
         Util::trace("Can't create toxcore context: %d", int(error));
@@ -208,9 +231,12 @@ Tox* create_tox_context(struct ApplicationContext *options)
     tox_self_get_address(tox, options->self_address);
     tox_callback_self_connection_status(tox, Callbacks::connection_status_changed, NULL);
 
-    const char *name = ApplicationContext::get_host_name();
-    if (name) {
-        tox_self_set_name(tox, (const uint8_t*) name, strlen(name) + 1, NULL);
+    const char *hostname = ApplicationContext::get_host_name();
+    if (hostname) {
+        Util::trace("Hostname: %s", hostname);
+        tox_self_set_name(tox, (const uint8_t*) hostname, strlen(hostname) + 1, NULL);
+    } else {
+        Util::trace("Invalid hostname");
     }
 
     return tox;
@@ -225,6 +251,7 @@ ToxVPNContext* create_vpn_context(Tox *tox, ApplicationContext *context)
 
     toxvpn_callback_membership_request(context->vpn_context, Callbacks::on_membership_request, context);
     toxvpn_callback_membership_response(context->vpn_context, Callbacks::on_membership_response, context);
+    toxvpn_callback_members_table_changed(context->vpn_context, Callbacks::on_members_table_changed, context);
 
     if (context->options_mask & SETTINGS_FILE_SET) {
         assert(strlen(context->settings_path_pattern) > 0);
@@ -293,7 +320,7 @@ int main(int argc, char *argv[])
     ToxVPNContext *vpn_context = create_vpn_context(tox, &app_context);
 
     {
-        char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
+        char *address_str = bin_to_hex_str_alloc(app_context.self_address, sizeof(app_context.self_address));
         Util::trace("Connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
         free(address_str);
     }
@@ -316,7 +343,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        char *server_address_str = bin_to_hex_str(app_context.server_address, sizeof(app_context.server_address));
+        char *server_address_str = bin_to_hex_str_alloc(app_context.server_address, sizeof(app_context.server_address));
         tox_trace(tox, "Added node %s", server_address_str);
         free(server_address_str);
     }
