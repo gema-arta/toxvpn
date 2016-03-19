@@ -16,6 +16,10 @@
 #include <unistd.h>
 #include <cassert>
 
+#include "resources.hpp"
+#include "util.hpp"
+#include "mmap.hpp"
+
 using namespace std;
 
 static const char *help_message = \
@@ -42,18 +46,27 @@ enum OptionFlags {
 
 typedef uint8_t byte;
 
-class ByteArray: public vector<byte> {
+
+template <typename T>
+class Array: public vector<T> {
 public:
+    using vector<T>::resize;
+    using vector<T>::empty;
+    using vector<T>::size;
 
-    ByteArray() {
+    Array() {
 
     }
 
-    ByteArray(const byte *src, size_t size) {
-        assign(src, size);
+    Array(const size_t count) {
+        resize(count);
     }
 
-    byte *operator ()() {
+    Array(const T *src, size_t count) {
+        assign(src, count);
+    }
+
+    T* operator ()() {
         if (empty()) {
             return nullptr;
         } else {
@@ -61,7 +74,7 @@ public:
         }
     }
 
-    const byte *operator ()() const {
+    const T* operator ()() const {
         if (empty()) {
             return nullptr;
         } else {
@@ -69,11 +82,14 @@ public:
         }
     }
 
-    void assign(const byte *src, size_t size) {
-        resize(size);
-        memcpy(&this->at(0), src, size);
+    void assign(const T *src, size_t count) {
+        resize(count);
+        memcpy(&this->at(0), src, count * sizeof(T));
     }
 };
+
+
+typedef Array<byte> ByteArray;
 
 struct DHTNode {
     string host;

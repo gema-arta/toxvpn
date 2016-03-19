@@ -4,6 +4,8 @@
 
 #include "toxvpn.h"
 #include "util.h"
+
+#include "util.hpp"
 #include "resources.hpp"
 #include "structures.hpp"
 
@@ -17,7 +19,6 @@
 #include <signal.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <limits.h>
 
 #include <string>
 #include <cstdarg>
@@ -25,30 +26,7 @@
 #include <tox/tox.h>
 
 
-inline void trace(const char* formator, ...) {
-    FILE *file = stderr;
-    va_list al;
-    va_start(al, formator);
-    vfprintf(file, formator, al);
-    fprintf(file, "\n");
-}
-
-#define min(x, y) (x < y ? x : y)
-
 static ApplicationContext app_context;
-
-void singnal_handler(int signal_code)
-{
-    switch (signal_code) {
-    case SIGINT:
-    case SIGTERM:
-        app_context.running = false;
-        break;
-    default:
-        trace("received unexpected signal %d", signal_code);
-        break;
-    }
-}
 
 namespace Callbacks {
 
@@ -112,13 +90,55 @@ void on_membership_response(ToxVPNContext *context, int32_t toxvpn_id, int32_t f
 
 }
 
-size_t file_get_size(FILE *file)
+namespace ToxVPN {
+    string format_addresses_table(ToxVPNContext *context) {
+        string formated_result;
+
+        const size_t vpn_count = toxvpn_get_count(context);
+        Array<uint32_t> vpn_list(vpn_count);
+
+        if (!toxvpn_get_list(context, vpn_list())) {
+            return string();
+        }
+
+        for (auto vpn_id: vpn_list) {
+            const size_t friends_count = toxvpn_friend_get_count(context, vpn_id);
+            formated_result += Util::string_format("vpn %X %lu\n", vpn_id, friends_count);
+
+            Array<uint32_t> friends_list(friends_count);
+            if (!toxvpn_friend_get_list(context, vpn_id, friends_list())) {
+                return string();
+            }
+
+            for (auto friend_id: friends_list) {
+                const char *ip = toxvpn_friend_get_ip(context, vpn_id, friend_id);
+                ByteArray friend_name(TOX_MAX_NAME_LENGTH);
+                ByteArray friend_pk(TOX_PUBLIC_KEY_SIZE);
+
+                tox_friend_get_name(context->tox, friend_id, friend_name(), nullptr);
+                tox_friend_get_public_key(context->tox, friend_id, friend_pk(), nullptr);
+
+                formated_result += Util::string_format("%s %s %X\n",
+                                                       string((const char*) friend_name(), friend_name.size()),
+                                                       ip, friend_id);
+            }
+        }
+
+        return formated_result;
+    }
+}
+
+void singnal_handler(int signal_code)
 {
-    const size_t pos = ftell(file);
-    fseek(file, 0, SEEK_END);
-    const size_t size = ftell(file);
-    fseek(file, pos, SEEK_SET);
-    return size;
+    switch (signal_code) {
+    case SIGINT:
+    case SIGTERM:
+        app_context.running = false;
+        break;
+    default:
+        Util::trace("received unexpected signal %d", signal_code);
+        break;
+    }
 }
 
 static const char* settings_get_toxcore_config_path(const char *path)
@@ -148,7 +168,7 @@ Tox* create_tox_context(struct ApplicationContext *options)
 
         FILE *file = fopen(settings_get_toxcore_config_path(options->settings_path_pattern), "rb+");
         if (file != NULL) {
-            settings_size = file_get_size(file);
+            settings_size = Util::file_get_size(file);
             settings_data = new uint8_t[settings_size];
 
             if (fread(settings_data, 1, settings_size, file) != settings_size) {
@@ -177,7 +197,7 @@ Tox* create_tox_context(struct ApplicationContext *options)
     Tox *tox = tox_new(tox_options, &error);
 
     if (tox == nullptr) {
-        trace("Can't create toxcore context: %d", int(error));
+        Util::trace("Can't create toxcore context: %d", int(error));
         return nullptr;
     }
 
@@ -211,7 +231,7 @@ ToxVPNContext* create_vpn_context(Tox *tox, ApplicationContext *context)
 
         FILE *file = fopen(settings_get_toxvpn_config_path(context->settings_path_pattern), "rb+");
         if (file != NULL) {
-            size_t settings_size = file_get_size(file);
+            size_t settings_size = Util::file_get_size(file);
             uint8_t *settings_data = new uint8_t[settings_size];
             toxvpn_settings_load(vpn_context, settings_data, settings_size);
             fclose(file);
@@ -250,10 +270,9 @@ bool settings_save(const ApplicationContext *context, const char *filename)
     return status;
 }
 
-
 int main(int argc, char *argv[])
 {
-    trace("Starting toxvpn %s %s", VERSION, REVISION);
+    Util::trace("Starting toxvpn %s %s", VERSION, REVISION);
     signal(SIGINT, singnal_handler);
     signal(SIGTERM, singnal_handler);
 
@@ -275,7 +294,7 @@ int main(int argc, char *argv[])
 
     {
         char *address_str = bin_to_hex_str(app_context.self_address, sizeof(app_context.self_address));
-        trace("Connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
+        Util::trace("Connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
         free(address_str);
     }
 

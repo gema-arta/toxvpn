@@ -88,10 +88,10 @@ bool toxvpn_self_get_shareid(ToxVPNContext *context, uint32_t toxvpn_id, uint8_t
 
 uint32_t toxvpn_friend_add(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber);
 bool toxvpn_friend_get_list(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t *list);
-size_t toxvpn_friend_get_list_size(ToxVPNContext *context, uint32_t toxvpn_id);
+size_t toxvpn_friend_get_count(ToxVPNContext *context, uint32_t toxvpn_id);
 const char* toxvpn_friend_get_ip(ToxVPNContext *context, uint32_t toxvpn_id, uint32_t friendnumber);
 
-size_t toxvpn_get_list_size(const ToxVPNContext *context);
+size_t toxvpn_get_count(const ToxVPNContext *context);
 bool toxvpn_get_list(const ToxVPNContext *context, uint32_t *list);
 
 char* toxvpn_settings_dump(const ToxVPNContext *context);

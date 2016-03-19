@@ -602,7 +602,7 @@ const char* toxvpn_friend_get_ip(ToxVPNContext *context, uint32_t toxvpn_id, uin
     return ip_ntoa(&member->ip);
 }
 
-size_t toxvpn_friend_get_list_size(ToxVPNContext *context, uint32_t toxvpn_id)
+size_t toxvpn_friend_get_count(ToxVPNContext *context, uint32_t toxvpn_id)
 {
     VPNInterface *i = interface_find_by_id(context, toxvpn_id);
     return i == NULL ? 0 : i->members_table.count;
@@ -629,7 +629,7 @@ bool toxvpn_get_list(const ToxVPNContext *context, uint32_t *list)
     return true;
 }
 
-size_t toxvpn_get_list_size(const ToxVPNContext *context)
+size_t toxvpn_get_count(const ToxVPNContext *context)
 {
     return interface_get_count(context);
 }
