@@ -279,8 +279,8 @@ static bool process_membership_request(ToxVPNContext *context, uint32_t friendnu
         tox_trace(context->tox, "Can't add toxvpn interface on request received");
     }
 
-    if (context->toxvpn_membership_request) {
-        context->toxvpn_membership_request(context, i->id, friendnumber, request_packet->flags, context->toxvpn_membership_request_data);
+    if (context->toxvpn_membership_request_cb) {
+        context->toxvpn_membership_request_cb(context, i->id, friendnumber, request_packet->flags, context->toxvpn_membership_request_data);
     } else {
         tox_trace(context->tox, "Received membership request callback was not set");
     }
@@ -304,6 +304,10 @@ static bool process_incoming_members_table(VPNInterface* interface, uint32_t fri
 
     bool members_table_changed = vpn_members_table_merge(&interface->members_table, &received_table);
     vpn_members_table_free(&received_table);
+
+    if (interface->context->_toxvpn_members_table_changed_cb) {
+        interface->context->_toxvpn_members_table_changed_cb(interface->context, interface->id, interface->context->toxvpn_members_table_changed_cb_data);
+    }
 
 #if DEBUG
     vpn_members_table_print(&interface->members_table, "process_incomming_members_table: table after merging");
@@ -350,8 +354,8 @@ static bool process_membership_response(VPNInterface *interface, uint32_t friend
     ToxVPNContext *context = interface->context;
     struct VPNMembershipResponsePacket *response_packet = (struct VPNMembershipResponsePacket*) packet;
 
-    if (context->toxvpn_membership_request) {
-        context->toxvpn_membership_response(interface->context, interface->id, friendnumber, response_packet->flags, context->toxvpn_membership_response_data);
+    if (context->toxvpn_membership_request_cb) {
+        context->toxvpn_membership_response_cb(interface->context, interface->id, friendnumber, response_packet->flags, context->toxvpn_membership_response_data);
     }
 
     if (response_packet->flags == TOXVPN_MEMBERSHIP_ACCEPT) {
@@ -570,15 +574,13 @@ const char* toxvpn_self_get_ip(ToxVPNContext *context, uint32_t toxvpn_id)
     return ip_ntoa(&i->address.ip);
 }
 
-//TODO: rename to toxvpn_net_get_name()
-const char* toxvpn_self_get_name(ToxVPNContext *context, uint32_t toxvpn_id)
+const char* toxvpn_net_get_name(ToxVPNContext *context, uint32_t toxvpn_id)
 {
     VPNInterface *i = interface_find_by_id(context, toxvpn_id);
     return i == NULL ? NULL : i->name;
 }
 
-//TODO: rename to toxvpn_net_get_shareid()
-bool toxvpn_self_get_shareid(ToxVPNContext *context, uint32_t toxvpn_id, uint8_t *share_id)
+bool toxvpn_net_get_shareid(ToxVPNContext *context, uint32_t toxvpn_id, uint8_t *share_id)
 {
     VPNInterface *i = interface_find_by_id(context, toxvpn_id);
 
@@ -896,15 +898,22 @@ error:
 }
 
 
-void toxvpn_callback_membership_response(ToxVPNContext *context, void (*callback)(ToxVPNContext *, int32_t, int32_t, uint8_t, void *), void *userdata)
+void toxvpn_callback_membership_response(ToxVPNContext *context, void (*callback)(ToxVPNContext *, uint32_t, uint32_t, uint8_t, void *), void *userdata)
 {
-    context->toxvpn_membership_response = callback;
+    context->toxvpn_membership_response_cb = callback;
     context->toxvpn_membership_response_data = userdata;
 }
 
 
-void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)(ToxVPNContext *, int32_t, int32_t, uint8_t, void *), void *userdata)
+void toxvpn_callback_membership_request(ToxVPNContext *context, void (*callback)(ToxVPNContext *, uint32_t, uint32_t, uint8_t, void *), void *userdata)
 {
-    context->toxvpn_membership_request = callback;
+    context->toxvpn_membership_request_cb = callback;
     context->toxvpn_membership_request_data = userdata;
+}
+
+
+void toxvpn_callback_members_table_changed(ToxVPNContext *context, void (*callback)(ToxVPNContext *, uint32_t, void *), void *userdata)
+{
+    context->_toxvpn_members_table_changed_cb = callback;
+    context->toxvpn_members_table_changed_cb_data = userdata;
 }
