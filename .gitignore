@@ -1,0 +1,4 @@
+*.o
+.travis.yml
+toxvpn.config*
+toxvpn.creator*

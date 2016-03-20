@@ -1,0 +1,41 @@
+language: c
+sudo: false
+compiler:
+- gcc
+os:
+- linux
+addons:
+  apt:
+    packages:
+    - libcap-dev
+    - libnl-route-3-dev
+    - libnl-3-dev
+    - libjansson-dev
+    - libsodium-dev
+
+before_install:
+  - echo $LANG
+  - echo $LC_ALL
+
+before_script:
+  - git clone git://github.com/irungentoo/toxcore.git > /dev/null
+  - cd toxcore
+  - autoreconf -i
+  - make -j3
+  - make check
+  - make install
+  - cd ..
+
+script:
+  - make all
+
+after_success:
+  - if [ $TRAVIS_BRANCH == $TRAVIS_TAG ]; then ./scripts/deploy.sh release github website triggers; fi
+
+branches:
+  only:
+  - master
+  - "/^v\\d+\\./"
+
+notifications:
+  email: false
