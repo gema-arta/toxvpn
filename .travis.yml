@@ -12,26 +12,30 @@ addons:
     - libnl-route-3-dev
     - libnl-3-dev
     - libjansson-dev
-    - libsodium-dev
 
 before_install:
   - echo $LANG
   - echo $LC_ALL
 
 before_script:
+  - git clone git://github.com/jedisct1/libsodium.git > /dev/null
+  - pushd libsodium
+  - ./autogen.sh
+  - ./configure
+  - make check -j3
+  - sudo make install
+  - popd
   - git clone git://github.com/irungentoo/toxcore.git > /dev/null
-  - cd toxcore
+  - pushd toxcore
   - autoreconf -i
+  - ./configure
   - make -j3
   - make check
-  - make install
-  - cd ..
+  - sudo make install
+  - popd
 
 script:
   - make all
-
-after_success:
-  - if [ $TRAVIS_BRANCH == $TRAVIS_TAG ]; then ./scripts/deploy.sh release github website triggers; fi
 
 branches:
   only:
