@@ -1,17 +1,21 @@
-language: c
+language: С
 sudo: true
 dist: trusty
 compiler:
-- gcc
+- gcc-5
 os:
 - linux
+env: CC=gcc-5 CXX=g++-5
 addons:
   apt:
     packages:
-    - libcap-dev
-    - libnl-route-3-dev
-    - libnl-3-dev
-    - libjansson-dev
+      - g++-5
+      - libcap-dev
+      - libnl-route-3-dev
+      - libnl-3-dev
+      - libjansson-dev
+    sources:
+      - ubuntu-toolchain-r-test
 
 before_install:
   - echo $LANG
