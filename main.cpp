@@ -115,7 +115,7 @@ void on_accept_friend_request(Tox *tox, const uint8_t *pk, const uint8_t *data, 
     tox_trace(tox, "Received Tox friend request from %lX with attached secret \"%s\"", *((uint64_t*) pk), secret_str);
 
     //TODO: replace by secure memcpy (timing atack)
-    if (length == sizeof(app_context.secret) && memcmp(app_context.secret, data, sizeof app_context.secret) == 0) {
+    if (length == app_context.secret.size() && memcmp(app_context.secret(), data, app_context.secret.size()) == 0) {
         TOX_ERR_FRIEND_ADD error;
         uint32_t friendnumber = tox_friend_add_norequest(tox, pk, &error);
         char *pk_str = bin_to_hex_str_alloc(pk, TOX_PUBLIC_KEY_SIZE);
@@ -313,9 +313,6 @@ int main(int argc, char *argv[])
 
     Tox *tox = create_tox_context(&app_context);
     assert(tox);
-    if (app_context.options_mask & NAME_SET) {
-        tox_self_set_name(tox, app_context.name, app_context.name_size, NULL);
-    }
 
     ToxVPNContext *vpn_context = create_vpn_context(tox, &app_context);
 
@@ -336,7 +333,7 @@ int main(int argc, char *argv[])
         }
     } else {
         TOX_ERR_FRIEND_ADD error;
-        if (tox_friend_add(tox, app_context.server_address, app_context.secret, sizeof(app_context.secret), &error) == UINT32_MAX) {
+        if (tox_friend_add(tox, app_context.server_address, app_context.secret(), app_context.secret.size(), &error) == UINT32_MAX) {
             if (error != TOX_ERR_FRIEND_ADD_ALREADY_SENT) {
                 tox_trace(tox, "Can't add a server node: %d", error);
                 return -30;

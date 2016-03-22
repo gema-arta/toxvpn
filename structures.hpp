@@ -35,11 +35,8 @@ static const char *help_message = \
 
 
 enum OptionFlags {
-    SUBNET_SET          =   1,
-    SECRET_SET          =   4,
-    NAME_SET            =   8,
     ADDRESS_SET         =   16,
-    SERVER_ADDRESS_SET  =   32,
+    SERVER_PK_SET       =   32,
     CLIENT_MODE_SET     =   64,
     PROXY_SET           =   128,
     SETTINGS_FILE_SET   =   256,
@@ -93,6 +90,16 @@ public:
     {
         resize(count);
         memcpy(&this->at(0), src, count * sizeof(T));
+    }
+
+    void fill_random()
+    {
+        randombytes((unsigned char*) &this->at(0), sizeof(T) * this->size());
+    }
+
+    void fill_zero()
+    {
+        memset((void*) &this->at(0), 0x0, sizeof(T) * this->size());
     }
 
     string to_str() const
@@ -174,23 +181,19 @@ public:
     {
         srand(time(NULL));
         parse_subnet(Util::string_format("10.%d.%d.0/24", rand() % 256, rand() % 256).c_str());
-        randombytes(secret, sizeof(secret));
+        secret.fill_random();
     }
 
     char *subnet;
     uint16_t prefixlen;
-
-    uint8_t secret[SECRET_SIZE];
-
-    const uint8_t *name;
-    size_t name_size;
-
+    ByteArray secret = ByteArray(SECRET_SIZE);
     uint8_t self_address[TOX_ADDRESS_SIZE];
     uint8_t server_address[TOX_ADDRESS_SIZE];
-
     uint32_t toxvpn_id;
     char *settings_path_pattern;
-
+    int options_mask;
+    ToxVPNContext *vpn_context = nullptr;
+    bool running = true;
     MemoryMappedFile members_table_mmap = Util::string_format("%s.%d", routing_table_path.c_str(), getpid());
 
     struct {
@@ -199,16 +202,10 @@ public:
         TOX_PROXY_TYPE type;
     } proxy;
 
-    int options_mask;
-
-    ToxVPNContext *vpn_context = nullptr;
-
-    bool running = true;
-
     string get_secret_representation() const
     {
         size_t first_zero_byte_pos = (size_t) -1;
-        for (size_t i = 0; i < sizeof(secret); i++) {
+        for (size_t i = 0; i < secret.size(); i++) {
             if (secret[i] == 0) {
                 if (first_zero_byte_pos == (size_t) -1) {
                     first_zero_byte_pos = i;
@@ -220,13 +217,13 @@ public:
         }
 
         if (first_zero_byte_pos != (size_t) -1) {
-          char* secret_str = bin_to_hex_str_alloc(secret, first_zero_byte_pos);
+          char* secret_str = bin_to_hex_str_alloc(secret(), first_zero_byte_pos);
           string result(secret_str);
           free(secret_str);
           return result;
         }
 
-        return string();
+        return secret.to_hex();
     }
 
     void print_usage(int argc, char **argv) const
@@ -235,12 +232,11 @@ public:
         fprintf(stderr, help_message);
     }
 
-
     int check_arguments() const
     {
         if (options_mask & CLIENT_MODE_SET)
         {
-            const int client_mask = CLIENT_MODE_SET | SERVER_ADDRESS_SET;
+            const int client_mask = CLIENT_MODE_SET | SERVER_PK_SET;
             return ((options_mask  & client_mask) == client_mask);
         }
         else
@@ -250,7 +246,7 @@ public:
         }
     }
 
-    int parse_subnet(const char *addr)
+    bool parse_subnet(const char *addr)
     {
         char *stringp = strdup(addr);
         char *token =  strtok(stringp, "/");
@@ -259,7 +255,7 @@ public:
         }
         else {
             free(stringp);
-            return 1;
+            return false;
         }
 
         token = strtok(NULL, "/");
@@ -271,7 +267,7 @@ public:
         }
 
         free(stringp);
-        return 0;
+        return true;
     }
 
     int parse_proxy(const char *arg)
@@ -322,20 +318,16 @@ public:
                 break;
             case 'n':
                 if (!parse_subnet(optarg)) {
-                    app_context->options_mask |= SUBNET_SET;
-                }
-                else {
                     fprintf(stderr, "can't parse subnet address/prefix %s %hu\n", app_context->subnet, app_context->prefixlen);
                     return -2;
                 }
                 break;
 
             case 's':
-                bzero(app_context->secret, sizeof app_context->secret);
+                bzero(app_context->secret(), app_context->secret.size());
                 converted = hex_string_to_bin_alloc(optarg);
-                memcpy(app_context->secret, converted, min(sizeof(app_context->secret), strlen(optarg)/2));
+                memcpy(app_context->secret(), converted, min(app_context->secret.size(), strlen(optarg)/2));
                 free(converted);
-                app_context->options_mask |= SECRET_SET;
                 break;
             case 'f':
                 app_context->settings_path_pattern = optarg;
@@ -356,13 +348,12 @@ public:
                 assert(token);
                 converted = hex_string_to_bin_alloc(token);
                 memcpy(app_context->server_address, converted, sizeof(app_context->server_address));
-                app_context->options_mask |= (SERVER_ADDRESS_SET | CLIENT_MODE_SET);
+                app_context->options_mask |= (SERVER_PK_SET | CLIENT_MODE_SET);
 
                 token = strtok(NULL, delim);
                 if (token) {
-                    options_mask |= SECRET_SET;
                     uint8_t *secret_data = hex_string_to_bin_alloc(token);
-                    memcpy(secret, secret_data, strlen(token) / 2);
+                    memcpy(secret(), secret_data, strlen(token) / 2);
                     free(secret_data);
                 }
 

@@ -1,10 +1,18 @@
 VERSION ?= 0.0.0
+LINK_STATICALLY ?= false
+
 REVISION = $(shell git rev-parse HEAD)
 
 COMMON_FLAGS := -Wall -g -Werror=incompatible-pointer-types -Werror=return-type -DVERSION="\"$(VERSION)\"" -DREVISION="\"$(REVISION)\""
 CXXFLAGS += -std=c++14 $(COMMON_FLAGS)
 CFLAGS += -std=c99 -I/usr/include/libnl3 $(COMMON_FLAGS)
-LDFLAGS += -pthread -static-libgcc -static-libstdc++ -Wl,-Bstatic -ltoxcore -lsodium -lnl-3 -lnl-route-3 -lcap -ljansson -Bdynamic
+LDFLAGS += -pthread -static-libgcc -static-libstdc++
+
+ifeq ($(LINK_STATICALLY),true)
+	LDFLAGS += -Wl,-Bstatic
+endif
+LDFLAGS += -ltoxcore -lsodium -lnl-3 -lnl-route-3 -lcap -ljansson
+
 OUTDIR := ./out
 OUTFILE := toxvpn
 
