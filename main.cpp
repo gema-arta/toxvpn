@@ -318,7 +318,7 @@ int main(int argc, char *argv[])
 
     {
         char *address_str = bin_to_hex_str_alloc(app_context.self_address, sizeof(app_context.self_address));
-        Util::trace("Connect address %s:%s", address_str, app_context.get_secret_representation().c_str());
+        Util::trace("Your address %s:%s", address_str, app_context.secret.to_hex().c_str());
         free(address_str);
     }
 

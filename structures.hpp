@@ -181,12 +181,14 @@ public:
     {
         srand(time(NULL));
         parse_subnet(Util::string_format("10.%d.%d.0/24", rand() % 256, rand() % 256).c_str());
+
+        secret.resize(SECRET_SIZE);
         secret.fill_random();
     }
 
     char *subnet;
     uint16_t prefixlen;
-    ByteArray secret = ByteArray(SECRET_SIZE);
+    ByteArray secret;
     uint8_t self_address[TOX_ADDRESS_SIZE];
     uint8_t server_address[TOX_ADDRESS_SIZE];
     uint32_t toxvpn_id;
@@ -201,30 +203,6 @@ public:
         uint16_t port;
         TOX_PROXY_TYPE type;
     } proxy;
-
-    string get_secret_representation() const
-    {
-        size_t first_zero_byte_pos = (size_t) -1;
-        for (size_t i = 0; i < secret.size(); i++) {
-            if (secret[i] == 0) {
-                if (first_zero_byte_pos == (size_t) -1) {
-                    first_zero_byte_pos = i;
-                }
-            }
-            else {
-                first_zero_byte_pos = (size_t) -1;
-            }
-        }
-
-        if (first_zero_byte_pos != (size_t) -1) {
-          char* secret_str = bin_to_hex_str_alloc(secret(), first_zero_byte_pos);
-          string result(secret_str);
-          free(secret_str);
-          return result;
-        }
-
-        return secret.to_hex();
-    }
 
     void print_usage(int argc, char **argv) const
     {
@@ -324,9 +302,8 @@ public:
                 break;
 
             case 's':
-                bzero(app_context->secret(), app_context->secret.size());
                 converted = hex_string_to_bin_alloc(optarg);
-                memcpy(app_context->secret(), converted, min(app_context->secret.size(), strlen(optarg)/2));
+                app_context->secret.assign(converted, strlen(optarg) / 2);
                 free(converted);
                 break;
             case 'f':
@@ -353,7 +330,7 @@ public:
                 token = strtok(NULL, delim);
                 if (token) {
                     uint8_t *secret_data = hex_string_to_bin_alloc(token);
-                    memcpy(secret(), secret_data, strlen(token) / 2);
+                    secret.assign(secret_data, strlen(token) / 2);
                     free(secret_data);
                 }
 
