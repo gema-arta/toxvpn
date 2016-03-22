@@ -86,10 +86,10 @@ namespace Callbacks {
 
 void connection_status_changed(Tox *tox, TOX_CONNECTION connection_status, void *user_data) {
     if (connection_status != TOX_CONNECTION_NONE) {
-        tox_trace(tox, "connected to dht via %s", get_transport_name(connection_status));
+        tox_trace(tox, "connected to DHT via %s", get_transport_name(connection_status));
     }
     else {
-        tox_trace(tox, "disconnected from dht node");
+        tox_trace(tox, "disconnected from DHT node");
     }
 }
 
@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
         free(address_str);
     }
 
-    app_context.options_mask |= ADDRESS_SET;
+    Util::trace("Listening on %d/udp %d/tcp", (int) tox_self_get_udp_port(tox, NULL), (int) tox_self_get_tcp_port(tox, NULL));
 
     if (!(app_context.options_mask & CLIENT_MODE_SET)) { //server node logic here
         app_context.toxvpn_id = toxvpn_new(vpn_context, app_context.subnet, app_context.prefixlen);
@@ -353,18 +353,23 @@ int main(int argc, char *argv[])
             TOX_ERR_BOOTSTRAP error;
 
             const DHTNode& node = app_context.get_next_dht_node();
-            tox_trace(tox, "Bootstraping from \"%s:%d\" DHT node", node.host.c_str(), (int) node.port);
+            tox_trace(tox, "Connecting to \"%s:%d\" DHT node", node.host.c_str(), (int) node.port);
 
             if (!tox_bootstrap(tox, node.host.c_str(), node.port, node.pk(), &error)) {
-                tox_trace(tox, "DHT node bootstrap failed: %d", error);
+                tox_trace(tox, "DHT node bootstrap via UDP failed: %d", error);
             }
+
+            if (!tox_add_tcp_relay(tox, node.host.c_str(), node.port, node.pk(), &error)) {
+                tox_trace(tox, "DHT node bootstrap via TCP failed: %d", error);
+            }
+
 
             dht_try_ts = time(NULL);
         }
 
         tox_iterate(tox);
         toxvpn_events_loop(vpn_context);
-        usleep(50);
+        usleep(tox_iteration_interval(tox));
     }
 
     if (app_context.options_mask & SETTINGS_FILE_SET) {

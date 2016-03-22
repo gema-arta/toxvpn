@@ -35,7 +35,6 @@ static const char *help_message = \
 
 
 enum OptionFlags {
-    ADDRESS_SET         =   16,
     SERVER_PK_SET       =   32,
     CLIENT_MODE_SET     =   64,
     PROXY_SET           =   128,
