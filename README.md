@@ -1,5 +1,5 @@
-[![Build Status](https://travis-ci.org/denis4net/toxvpn.svg?branch=master)](https://travis-ci.org/denis4net/toxvpn)
-[![Gitter](https://badges.gitter.im/denis4net/toxvpn.svg)](https://gitter.im/denis4net/toxvpn?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+ToxVPN is fully decentralized VPN solution for you.
+It uses libtoxcore and libsodium as trasnport/authentication framework to ensure the proper level of security. ToxVPN doesn't need central server like OpenVPN or CiscoVPN and provides sufficient level of security thought using libsodium.
 
 ##Dependencies
 
