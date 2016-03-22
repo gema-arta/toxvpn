@@ -20,6 +20,7 @@
 #include "util.hpp"
 #include "mmap.hpp"
 #include "util.h"
+#include <sodium/randombytes.h>
 
 using namespace std;
 
@@ -172,7 +173,8 @@ public:
     ApplicationContext()
     {
         srand(time(NULL));
-        parse_subnet(DEFAULT_SUBNET);
+        parse_subnet(Util::string_format("10.%d.%d.0/24", rand() % 256, rand() % 256).c_str());
+        randombytes(secret, sizeof(secret));
     }
 
     char *subnet;
