@@ -4,6 +4,7 @@
 
 #include "toxvpn.h"
 #include "util.h"
+#include "glibccompat.h"
 
 #include "util.hpp"
 #include "resources.hpp"

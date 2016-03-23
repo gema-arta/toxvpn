@@ -9,7 +9,7 @@ CFLAGS += -std=c99 -I/usr/include/libnl3 $(COMMON_FLAGS)
 LDFLAGS += -pthread -static-libgcc -static-libstdc++
 
 ifeq ($(LINK_STATICALLY),true)
-	LDFLAGS += -Wl,-Bstatic
+	LDFLAGS += -Wl,-Bstatic -lrt
 endif
 LDFLAGS += -ltoxcore -lsodium -lnl-3 -lnl-route-3 -lcap -ljansson
 
@@ -25,6 +25,7 @@ $(OUTFILE): $(OBJS)
 	mkdir -p $(OUTDIR)
 	$(CXX) $(OBJS) $(LDFLAGS) -o $@
 	readelf -d $@ | grep "Shared library"
+	objdump -T $@ | grep  GLIBC_2 | awk '{print $4}' | sort -u
 
 %.o: %.c
 		$(CC) $(CFLAGS) -c -o $@ $<
