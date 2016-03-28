@@ -229,7 +229,7 @@ Tox* create_tox_context(struct ApplicationContext *options)
 
     tox_callback_friend_request(tox, Callbacks::on_accept_friend_request, options);
     tox_callback_friend_connection_status(tox, Callbacks::on_fiend_connection_status_cnaged, options);
-    tox_self_get_address(tox, options->self_address);
+    tox_self_get_address(tox, options->self_address());
     tox_callback_self_connection_status(tox, Callbacks::connection_status_changed, NULL);
 
     const char *hostname = ApplicationContext::get_host_name();
@@ -316,13 +316,7 @@ int main(int argc, char *argv[])
     assert(tox);
 
     ToxVPNContext *vpn_context = create_vpn_context(tox, &app_context);
-
-    {
-        char *address_str = bin_to_hex_str_alloc(app_context.self_address, sizeof(app_context.self_address));
-        Util::trace("Your address %s:%s", address_str, app_context.secret.to_hex().c_str());
-        free(address_str);
-    }
-
+    Util::trace("Your address %s:%s", app_context.self_address.to_base58().c_str(), app_context.secret.to_base58().c_str());
     Util::trace("Listening on %d/udp %d/tcp", (int) tox_self_get_udp_port(tox, NULL), (int) tox_self_get_tcp_port(tox, NULL));
 
     if (!(app_context.options_mask & CLIENT_MODE_SET)) { //server node logic here
@@ -334,16 +328,14 @@ int main(int argc, char *argv[])
         }
     } else {
         TOX_ERR_FRIEND_ADD error;
-        if (tox_friend_add(tox, app_context.server_address, app_context.secret(), app_context.secret.size(), &error) == UINT32_MAX) {
+        if (tox_friend_add(tox, app_context.server_address(), app_context.secret(), app_context.secret.size(), &error) == UINT32_MAX) {
             if (error != TOX_ERR_FRIEND_ADD_ALREADY_SENT) {
                 tox_trace(tox, "Can't add a server node: %d", error);
                 return -30;
             }
         }
 
-        char *server_address_str = bin_to_hex_str_alloc(app_context.server_address, sizeof(app_context.server_address));
-        tox_trace(tox, "Added node %s", server_address_str);
-        free(server_address_str);
+        tox_trace(tox, "Added node %s", app_context.server_address.to_base58().c_str());
     }
 
 

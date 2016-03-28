@@ -19,6 +19,7 @@
 #include "resources.hpp"
 #include "util.hpp"
 #include "mmap.hpp"
+#include "base58.hpp"
 #include "util.h"
 #include <sodium/randombytes.h>
 
@@ -52,6 +53,8 @@ public:
     using vector<T>::empty;
     using vector<T>::size;
 
+    enum Encoding { ENCODING_BASE58 };
+
     Array()
     {
 
@@ -66,6 +69,8 @@ public:
     {
         assign(src, count);
     }
+
+    Array(const string &src, const Encoding encoding = ENCODING_BASE58);
 
     T* operator ()()
     {
@@ -117,7 +122,35 @@ public:
         free(hex_str);
         return hex;
     }
+
+    string to_base58() const {
+        if (this->empty()) {
+            return "";
+        }
+
+        const uint8_t *start = (const uint8_t*) &this->at(0);
+        const uint8_t *end = start + size() * sizeof(T);
+        return EncodeBase58(start, end);
+    }
 };
+
+template<>
+Array<byte>::Array(const string &src, const Encoding encoding)
+{
+    if (encoding == ENCODING_BASE58) {
+        DecodeBase58(src, *this);
+    }
+    else {
+        throw "not supported";
+    }
+}
+
+
+template <typename T>
+Array<T>::Array(const string &src, const Encoding encoding)
+{
+    throw "not supported";
+}
 
 
 typedef Array<byte> ByteArray;
@@ -188,8 +221,8 @@ public:
     char *subnet;
     uint16_t prefixlen;
     ByteArray secret;
-    uint8_t self_address[TOX_ADDRESS_SIZE];
-    uint8_t server_address[TOX_ADDRESS_SIZE];
+    ByteArray self_address = ByteArray(TOX_ADDRESS_SIZE);
+    ByteArray server_address = ByteArray(TOX_ADDRESS_SIZE);
     uint32_t toxvpn_id;
     char *settings_path_pattern;
     int options_mask;
@@ -301,9 +334,7 @@ public:
                 break;
 
             case 's':
-                converted = hex_string_to_bin_alloc(optarg);
-                app_context->secret.assign(converted, strlen(optarg) / 2);
-                free(converted);
+                app_context->secret = ByteArray(optarg, ByteArray::ENCODING_BASE58);
                 break;
             case 'f':
                 app_context->settings_path_pattern = optarg;
@@ -322,15 +353,12 @@ public:
                 char* token = strtok(arg_dup, delim);
 
                 assert(token);
-                converted = hex_string_to_bin_alloc(token);
-                memcpy(app_context->server_address, converted, sizeof(app_context->server_address));
+                app_context->server_address = ByteArray(token, ByteArray::ENCODING_BASE58);
                 app_context->options_mask |= (SERVER_PK_SET | CLIENT_MODE_SET);
 
                 token = strtok(NULL, delim);
                 if (token) {
-                    uint8_t *secret_data = hex_string_to_bin_alloc(token);
-                    secret.assign(secret_data, strlen(token) / 2);
-                    free(secret_data);
+                    secret = ByteArray(token, ByteArray::ENCODING_BASE58);
                 }
 
                 free(arg_dup);
