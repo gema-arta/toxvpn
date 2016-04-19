@@ -41,4 +41,12 @@ clean:
 
 install:
 	install -m 0755 $(OUTFILE)  $(PREFIX)/bin/$(OUTFILE)
+	mkdir -p $(PREFIX)/lib/systemd/system/
 	setcap cap_net_admin+ep $(PREFIX)/bin/$(OUTFILE)
+
+	install system/linux/toxvpn.service /lib/systemd/system/toxvpn.service
+	systemctl daemon-reload
+
+	useradd -M toxpvn || :
+	mkdir -p /var/run/toxvpn
+	chown toxvpn /var/run/toxvpn

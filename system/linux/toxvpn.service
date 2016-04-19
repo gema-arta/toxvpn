@@ -1,0 +1,11 @@
+[Unit]
+Description=ToxVPN
+Wants=network.target
+After=network.target network-online.target
+
+[Service]
+User=toxvpn
+ExecStart=/usr/local/bin/toxvpn -f /var/run/toxvpn/
+
+[Install]
+WantedBy=multi-user.target
