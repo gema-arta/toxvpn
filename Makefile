@@ -2,7 +2,7 @@ VERSION ?= 0.0.0
 LINK_STATICALLY ?= false
 
 REVISION = $(shell git rev-parse HEAD)
-
+PREFIX ?= /usr/local/
 COMMON_FLAGS := -Wall -g -Werror=incompatible-pointer-types -Werror=return-type -DVERSION="\"$(VERSION)\"" -DREVISION="\"$(REVISION)\""
 CXXFLAGS += -std=c++14 $(COMMON_FLAGS)
 CFLAGS += -std=c99 -I/usr/include/libnl3 $(COMMON_FLAGS)
@@ -38,3 +38,7 @@ memcheck: $(OUTFILE)
 
 clean:
 		rm -f $(OBJS) $(OUTFILE)
+
+install:
+	install -m 0755 $(OUTFILE)  $(PREFIX)/bin/$(OUTFILE)
+	setcap cap_net_admin+ep $(PREFIX)/bin/$(OUTFILE)
