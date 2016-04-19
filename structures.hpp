@@ -312,7 +312,6 @@ public:
     {
         ApplicationContext *app_context = this;
 
-        uint8_t *converted;
         int c;
         while ((c = getopt (argc, argv, "hn:p:s:c:b:f:")) != -1) {
             switch (c)
@@ -362,8 +361,6 @@ public:
                 }
 
                 free(arg_dup);
-                free(converted);
-
                 break;
             }
             case 'h':
