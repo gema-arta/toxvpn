@@ -16,19 +16,3 @@ sudo apt-get install apt-transport-https
 sudo apt-get update
 apt install -y libcap-dev libnl-route-3-dev libnl-3-dev libjansson-dev libsodium-dev libtox-dev
 ```
-
-## Chroot
-
-### ArchLinux
-`packer -S binfmt-qemu-static qemu-user-static binfmt-support`
-
-### Debian
-`apt install -y -qq qemu-user-static qemu-user-binfmt`
-
-### Boostraping
-```
-# debootstrap --arch mips --include=libcap-dev,libnl-route-3-dev,libnl-3-dev,libjansson-dev,libsodium-dev,libtox-dev,apt-transport-https,wget,apt jessie debian-jessie-mips ftp://ftp.byfly.by/pub/debian
-
-# cp /usr/bin/qemu-mips-static debian-jessie-mips/usr/bin
-# chroot debian-jessie-mips /bin/bash
-```

@@ -39,6 +39,12 @@ memcheck: $(OUTFILE)
 clean:
 		rm -f $(OBJS) $(OUTFILE)
 
+toxcore:
+	git clone https://github.com/irungentoo/toxcore.git
+	cd toxcore && autoreconf -i && ./configure
+	make -C toxcore
+	make -C toxcore install
+
 install:
 	install -m 0755 $(OUTFILE)  $(PREFIX)/bin/$(OUTFILE)
 	mkdir -p $(PREFIX)/lib/systemd/system/
