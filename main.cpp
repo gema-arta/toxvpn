@@ -318,6 +318,9 @@ int main(int argc, char *argv[])
     ToxVPNContext *vpn_context = create_vpn_context(tox, &app_context);
     Util::trace("Your address %s:%s", app_context.self_address.to_base58().c_str(), app_context.secret.to_base58().c_str());
     Util::trace("Listening on %d/udp %d/tcp", (int) tox_self_get_udp_port(tox, NULL), (int) tox_self_get_tcp_port(tox, NULL));
+    if (app_context.daemonize) {
+        daemon(1, 1);
+    }
 
     if (!(app_context.options_mask & CLIENT_MODE_SET)) { //server node logic here
         app_context.toxvpn_id = toxvpn_new(vpn_context, app_context.subnet, app_context.prefixlen);

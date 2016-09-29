@@ -31,7 +31,8 @@ static const char *help_message = \
     "-p <proxy>\t use socks|http://hostname:port> proxy server\n" \
     "-n <subnetwork/prefix length>\n" \
     "-c <address>:<secret>\t connect to server using tox address\n" \
-    "-f <file>\tload/save settings from/to file\n";
+    "-f <file>\tload/save settings from/to file\n" \
+    "-d daemonize\n";
 
 
 
@@ -228,6 +229,7 @@ public:
     int options_mask;
     ToxVPNContext *vpn_context = nullptr;
     bool running = true;
+    bool daemonize = false;
     MemoryMappedFile members_table_mmap = Util::string_format("%s.%d", routing_table_path.c_str(), getpid());
 
     struct {
@@ -313,7 +315,7 @@ public:
         ApplicationContext *app_context = this;
 
         int c;
-        while ((c = getopt (argc, argv, "hn:p:s:c:b:f:")) != -1) {
+        while ((c = getopt (argc, argv, "hn:p:s:c:b:f:d")) != -1) {
             switch (c)
             {
             case 'p':
@@ -363,6 +365,9 @@ public:
                 free(arg_dup);
                 break;
             }
+            case 'd':
+                app_context->daemonize = true;
+                break;
             case 'h':
                 return 1;
             case '?':
