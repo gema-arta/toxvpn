@@ -1,23 +1,17 @@
-
-image: ubuntu:15.10
+image: denis4inet/toxvpn-build-env
 variables:
   CXX: g++-5
   CC: gcc-5
   LINK_STATICALLY: "true"
   VERSION: 0.0.${CI_PROJECT_ID}
+
 stages:
   - build
-  - cleanup
 
 toxvpn:
   stage: build
   script:
-    - apt-get update && apt-get install -y -qq  apt-transport-https wget lsb-release
-    - echo "deb https://pkg.tox.chat/debian stable $(lsb_release -cs)" | tee /etc/apt/sources.list.d/tox.list
-    - wget -qO - https://pkg.tox.chat/debian/pkg.gpg.key | apt-key add -
-    - apt-get update -qq && apt-get install -y -qq git libcap-dev libnl-route-3-dev libnl-3-dev libjansson-dev libsodium-dev libtox-dev gcc-5 g++-5 make
     - make all
-
   artifacts:
     paths:
       - toxvpn
