@@ -1,6 +1,8 @@
 VERSION ?= 0.0.0
 LINK_STATICALLY ?= false
 
+CC ?= gcc
+CXX ?= g++
 REVISION = $(shell git rev-parse HEAD)
 PREFIX ?= /usr/local/
 COMMON_FLAGS := -Wall -g -Werror=incompatible-pointer-types -Werror=return-type -DVERSION="\"$(VERSION)\"" -DREVISION="\"$(REVISION)\""
